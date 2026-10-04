@@ -35,6 +35,7 @@ import {
   logName,
   pullDefault,
   pullName,
+  replaySpan,
   resetTheme,
   series,
   showTip,
@@ -68,6 +69,7 @@ function collectSettings(): Settings {
     working: S.rview,
     names: S.names,
     watchDir: S.watchDir,
+    switches: S.swShow,
   };
 }
 function flushSettings(): void {
@@ -933,9 +935,40 @@ function updateGridNow(): void {
   }
 }
 
+// ---------- switch rows ----------
+
+let swKey = '';
+let swSeq = 0;
+
+/** Ask the core for the switch rows of the span on screen. Runs on every draw and asks once per span. */
+function syncSwitches(): void {
+  const f = S.focus;
+  const span = f && S.swShow ? replaySpan(f) : null;
+  const key = f && span ? [f.log.key, ...span].join('|') : '';
+  if (key === swKey) return;
+  swKey = key;
+  const seq = ++swSeq;
+  // rows for another span must not be drawn against this one while the new rows are on their way
+  S.sw = null;
+  S.rev++;
+  if (!f || !span) return;
+  api.switches(f.log.key, span[0], span[1]).then(
+    rows => {
+      if (seq !== swSeq) return;
+      S.sw = rows;
+      S.rev++;
+      drawAll();
+    },
+    e => {
+      if (seq === swSeq) status('Switch rows failed: ' + errText(e));
+    },
+  );
+}
+
 // ---------- frame loop ----------
 
 function drawAll(): void {
+  syncSwitches();
   syncTransport();
   updateReadouts();
   drawDyno();
@@ -1151,6 +1184,11 @@ function wire(): void {
   });
   input('pick-q').addEventListener('input', filterPicker);
   input('pick-chg').addEventListener('change', filterPicker);
+  input('pick-sw').addEventListener('change', () => {
+    S.swShow = input('pick-sw').checked;
+    saveSettings();
+    drawAll();
+  });
   $<HTMLSelectElement>('view-sel').addEventListener('change', e => loadView((e.target as HTMLSelectElement).value));
   $('view-back').addEventListener('click', () => {
     leaveFinding();
@@ -1427,6 +1465,9 @@ export async function boot(): Promise<void> {
   else S.rview = copyView(S.viewName === 'Default' ? DEFAULT_VIEW : S.views[S.viewName]);
   input('view-name').value = S.viewName === 'Default' ? '' : S.viewName;
   S.watchDir = typeof st.watchDir === 'string' ? st.watchDir : '';
+  // on unless it was turned off: settings saved before the switch rows existed have no entry
+  S.swShow = st.switches !== false;
+  input('pick-sw').checked = S.swShow;
   settingsReady = true;
   renderWatch();
   renderViewSel();

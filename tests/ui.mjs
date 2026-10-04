@@ -83,6 +83,13 @@ try {
       return [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16)).concat(255);
     }, name);
   const sameColour = (a, b) => a.every((v, i) => Math.abs(v - b[i]) <= 2);
+  /** Waits for a condition in the page. Answers false, with no exception, when it does not come true. */
+  const until = (page, fn, arg) =>
+    page.waitForFunction(fn, arg, { timeout: 5000 }).then(
+      () => true,
+      () => false,
+    );
+  const rowsShown = (page, n) => until(page, n => window.__logViewer.swNow?.length === n, n);
 
   // empty library
   let page = await open();
@@ -319,6 +326,106 @@ try {
   await page.click('[data-xmode="time"]');
   drawn = await replay(page);
   check('with no rows the traces take the height they had', drawn.height === bare.height && drawn.now === '', String(drawn.height));
+
+  // switch rows from the core. The default pull is run A already, so make another pull run A and come back: that focuses it.
+  const asked = [];
+  page.on('request', q => /\/api\/switches$/.test(q.url()) && asked.push(JSON.parse(q.postData())));
+  await page.locator('.pull', { hasText: '3rd gear · 2,974' }).locator('button.r0').click();
+  // the rows put in by hand were taken out above, so rows here are the core's answer for that pull
+  await until(page, () => window.__logViewer.sw !== null);
+  await page.locator('.pull', { hasText: '2,551–5,959' }).locator('button.r0').click();
+  await rowsShown(page, 6);
+  let pull = await replay(page);
+  const names = (pull.rows || []).map(r => r.name);
+  check(
+    'the default pull shows the switches that change in it, in order of first change',
+    names.join() ===
+      'Decel Detected,Drive By Wire 1 Pin 1 Output State,Clutch State,Gear Upshift State,Stepper 1 Pin 2 Output State,Predicted MAP Active' &&
+      pull.height === bare.height + SW.top + 6 * swPitch,
+    names.join() + ' ' + pull.height,
+  );
+  // the clutch is the third row; its second change is the pedal coming back up
+  const up = pull.rows?.[2]?.changes[1] ?? 0;
+  const flip = [await playhead(page, up - 0.1), await playhead(page, up + 0.1)].map(now => now.split(',')[2]);
+  check('the readout flips as the playhead crosses a change', flip.join() === 'On,Off', flip.join());
+  await shot(page, '06c-switch-rows-pull', true);
+  await page.click('#play');
+  await page.waitForTimeout(400);
+  await page.click('#play');
+  check(
+    'the rows are asked for once for each span, not on every frame',
+    asked.length === 2 && asked[1].t0 === pull.w0 && asked[1].t1 === pull.w1,
+    JSON.stringify(asked),
+  );
+  await page.click('[data-xmode="rpm"]');
+  const byRpm = await replay(page);
+  await page.click('[data-xmode="time"]');
+  pull = await replay(page);
+  check(
+    'By RPM hides them, and By time shows them again without asking again',
+    byRpm.now === '' &&
+      byRpm.height === bare.height &&
+      / By RPM hides the switch rows\.$/.test(byRpm.note) &&
+      pull.now.split(',').length === 6 &&
+      asked.length === 2,
+    JSON.stringify([byRpm.now, byRpm.height, byRpm.note, pull.now, asked.length]),
+  );
+  // the rows follow the span on screen, whatever set it: narrow the span by hand and they are asked for again
+  await page.evaluate(() => {
+    const s = window.__logViewer;
+    s.focus.w0 += 2;
+    s.focus.w1 -= 2;
+    s.rev++;
+  });
+  await page.click('[data-xmode="time"]');
+  await rowsShown(page, 2);
+  const narrow = await replay(page);
+  check(
+    'the rows follow the span on screen when it changes',
+    asked.length === 3 &&
+      asked[2].t0 === narrow.w0 &&
+      asked[2].t1 === narrow.w1 &&
+      (narrow.rows || []).map(r => r.name).join() === 'Stepper 1 Pin 2 Output State,Predicted MAP Active',
+    JSON.stringify([asked.length, asked[2], (narrow.rows || []).map(r => r.name)]),
+  );
+  await page.locator('.log-head', { hasText: 'Back road' }).locator('button', { hasText: 'Replay' }).click();
+  await rowsShown(page, 8);
+  const whole = await replay(page);
+  check(
+    'a whole log shows eight rows and counts the rest',
+    whole.more === 3 && / 3 more switches change in this span and are not shown\.$/.test(whole.note),
+    whole.more + ' ' + whole.note,
+  );
+
+  // an answer that arrives after the user has moved to another span must not be drawn against that span
+  let held = 0;
+  await page.route('**/api/switches', async route => {
+    if (!held++) await new Promise(r => setTimeout(r, 800));
+    await route.continue();
+  });
+  await page.locator('.log-head', { hasText: '1:44 pm log' }).locator('button', { hasText: 'Replay' }).click();
+  await page.locator('.log-head', { hasText: '1:42 pm log' }).locator('button', { hasText: 'Replay' }).click();
+  await page.waitForTimeout(1200);
+  await page.unroute('**/api/switches');
+  const late = await replay(page);
+  check(
+    'rows that arrive late for another span are dropped',
+    late.log === 'PCLog_2026-04-17_0142pm.csv' && late.rows?.length === 0 && late.height === bare.height,
+    JSON.stringify([late.log, late.rows?.length, late.height]),
+  );
+
+  // the checkbox in Channels turns the rows off without asking the core
+  await page.locator('.log-head', { hasText: 'Back road' }).locator('button', { hasText: 'Replay' }).click();
+  await rowsShown(page, 8);
+  const askedBefore = asked.length;
+  const box = page.locator('#pick-sw');
+  if (await box.count()) await box.uncheck();
+  const off = await replay(page);
+  check(
+    'the checkbox in Channels turns the rows off',
+    (await box.count()) === 1 && off.rows === null && off.now === '' && off.height === bare.height && asked.length === askedBefore,
+    JSON.stringify([off.rows, off.now, off.height, asked.length - askedBefore]),
+  );
   await page.click('[data-smooth="high"]');
   await page.waitForTimeout(600); // settings are written a moment after the last change
   await page.close();
@@ -340,6 +447,31 @@ try {
       back.smooth === 'high',
     JSON.stringify(back),
   );
+
+  // the switch rows were turned off before the window closed: they stay off, and ticking the box brings them back
+  const kept = await page.evaluate(() => ({
+    box: document.getElementById('pick-sw')?.checked,
+    rows: window.__logViewer.sw,
+    now: window.__logViewer.swNow?.length,
+  }));
+  check('switch rows stay off after a reload', kept.box === false && kept.rows === null && kept.now === 0, JSON.stringify(kept));
+  await page.click('#chan-btn');
+  if (await page.locator('#pick-sw').count()) await page.check('#pick-sw');
+  check('and come back when the box is ticked', await rowsShown(page, 6));
+  // a switch added as a trace is drawn as a trace and keeps its row
+  await page.fill('#pick-q', 'clutch state');
+  const clutchTrace = page
+    .locator('#pick-list .pk:not([hidden])', { has: page.locator('.nm[title="Clutch State"]') })
+    .locator('button', { hasText: 'Trace' });
+  await clutchTrace.click();
+  const both = await replay(page);
+  check(
+    'a switch added as a trace keeps its row',
+    both.height === bare.height + (TG.lab + TG.ph + TG.gap) + SW.top + 6 * swPitch && both.rows?.[2]?.name === 'Clutch State',
+    both.height + ' ' + both.rows?.[2]?.name,
+  );
+  await clutchTrace.click();
+  await page.fill('#pick-q', '');
 
   // a saved smoothing level the app does not know falls back to Medium, also when it names something every object has
   await page.waitForTimeout(600); // let the write this page scheduled on opening finish first
@@ -394,12 +526,19 @@ try {
   ]) {
     page = await open({ viewport: { width, height }, colorScheme: 'dark', hasTouch: true });
     await settle(page);
+    // the default pull is on screen with its six switch rows
+    await rowsShown(page, 6);
     const m = await page.evaluate(() => ({
       sw: document.documentElement.scrollWidth,
       cw: document.documentElement.clientWidth,
       rail: getComputedStyle(document.querySelector('.rail')).position,
+      rows: window.__logViewer.swNow?.length,
     }));
-    check(name + ' layout fits', m.sw <= m.cw && m.rail === (width < 860 ? 'static' : 'sticky'), JSON.stringify(m));
+    check(
+      name + ' layout fits, switch rows included',
+      m.sw <= m.cw && m.rail === (width < 860 ? 'static' : 'sticky') && m.rows === 6,
+      JSON.stringify(m),
+    );
     await shot(page, '07-' + name, true);
     await page.close();
   }

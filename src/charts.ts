@@ -1,7 +1,7 @@
 // Canvas drawing: the power chart, the replay traces and the 3D table.
 
 import { atRpm, clamp, curveAtTime, idxAt, quant, valAt } from './data';
-import { $, RUN, S, chInfo, css, curTable, curView, fmt, hideTip, mix, niceStep, prep, series, showTip, theme } from './state';
+import { $, RUN, S, chInfo, css, curTable, curView, fmt, hideTip, mix, niceStep, prep, replaySpan, series, showTip, theme } from './state';
 import type { Cell, ChInfo, RGB, TipRow } from './state';
 import type { Log, Pt, Pull, SwitchRow, Table, TraceDef } from './types';
 
@@ -308,9 +308,8 @@ function trLayout(w: number): TraceLayout {
     x0 = Math.floor(a / 500) * 500;
     x1 = Math.ceil(b / 500) * 500;
   } else {
-    spans.push({ log: f.log, i0: idxAt(f.log, f.w0), i1: Math.min(f.log.n - 1, idxAt(f.log, f.w1) + 1), first: true });
-    x0 = f.w0;
-    x1 = f.w1;
+    [x0, x1] = replaySpan(f);
+    spans.push({ log: f.log, i0: idxAt(f.log, x0), i1: Math.min(f.log.n - 1, idxAt(f.log, x1) + 1), first: true });
   }
   const X = (v: number) => TG.l + ((v - x0) / (x1 - x0 || 1)) * pw;
   // y range per panel from whatever will be drawn

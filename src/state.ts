@@ -205,6 +205,9 @@ export interface Focus {
   label: string;
 }
 
+/** The stretch of the focused log the replay shows, in log seconds. The traces and the switch rows both read it here, so they always show the same stretch. */
+export const replaySpan = (f: Focus): [number, number] => [f.w0, f.w1];
+
 /** The channels behind a finding, shown in place of the user's view until they leave it. */
 export interface FindingView extends View {
   title: string;
@@ -265,6 +268,8 @@ export const S = {
   sw: null as Switches | null,
   /** what each switch row reads at the playhead, as last drawn: On, Off, or – where there are no samples */
   swNow: [] as string[],
+  /** "Show switches that change" in the Channels picker */
+  swShow: true,
 };
 
 /** The view on screen: a finding's own channels while one is being shown, otherwise the user's working view. */

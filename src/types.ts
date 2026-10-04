@@ -208,4 +208,6 @@ export interface Settings {
   working?: View;
   names?: { logs: Record<string, string>; pulls: Record<string, string> };
   watchDir?: string;
+  /** "Show switches that change" in the Channels picker; on unless this is false */
+  switches?: boolean;
 }
