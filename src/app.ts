@@ -16,6 +16,7 @@ import {
   traceLayout,
 } from './charts';
 import { atRpm, buildLog, chanMeta, clamp, fixTable, valAt } from './data';
+import { clearMessage, fail, progress, say, wireMessages } from './messages';
 import {
   $,
   AZ0,
@@ -60,13 +61,15 @@ import type { TipRow } from './state';
 import type { DynoOut, Finding, Log, Occurrence, Pull, Settings, Sev, Table, TraceDef, Vehicle } from './types';
 
 const input = (id: string) => $<HTMLInputElement>(id);
-const status = (text: string) => {
-  $('status').textContent = text;
-};
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const scrollTo = (id: string) => $(id).scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 
 // ---------- settings ----------
+
+/** How each failure that offers Try again starts. The same request succeeding later clears a message that starts with it. */
+const SETTINGS_FAILED = 'Settings were not saved: ';
+const DYNO_FAILED = 'Power estimate failed: ';
+const LIBRARY_FAILED = 'The library could not be opened: ';
 
 let settingsReady = false;
 let saveTimer = 0;
@@ -87,11 +90,17 @@ function collectSettings(): Settings {
     switches: S.swShow,
   };
 }
+function writeSettings(): void {
+  api.setSettings(collectSettings()).then(
+    () => clearMessage(SETTINGS_FAILED),
+    e => fail(SETTINGS_FAILED + errText(e), { label: 'Try again', run: writeSettings }),
+  );
+}
 function flushSettings(): void {
   if (!saveTimer) return;
   clearTimeout(saveTimer);
   saveTimer = 0;
-  api.setSettings(collectSettings()).catch(e => status('Settings were not saved: ' + errText(e)));
+  writeSettings();
 }
 /** Settings are written a moment after the last change, so typing in a field is one write. */
 function saveSettings(): void {
@@ -236,10 +245,12 @@ async function recompute(): Promise<void> {
   try {
     out = await api.dyno(v, keys);
   } catch (e) {
-    status('Power estimate failed: ' + errText(e));
+    // a request that a newer one has replaced does not report: its failure is not about what is on screen
+    if (seq === dynSeq) fail(DYNO_FAILED + errText(e), { label: 'Try again', run: () => void recompute() });
     return;
   }
   if (seq !== dynSeq) return;
+  clearMessage(DYNO_FAILED);
   S.dyn = out.runs;
   S.band = out.band;
   S.runFindings = attach(out.checks);
@@ -290,9 +301,9 @@ async function removeLog(log: Log): Promise<void> {
     delete S.names.logs[log.key];
     for (const p of S.pulls) if (p.log === log) delete S.names.pulls[p.key];
     await reload();
-    status('Removed ' + log.name + ' from the library. The original file is untouched.');
+    say('Removed ' + log.name + ' from the library. The original file is untouched.');
   } catch (e) {
-    status(errText(e));
+    fail(errText(e));
   }
 }
 
@@ -953,7 +964,7 @@ function updateGridNow(): void {
 
 let swKey = '';
 let swSeq = 0;
-/** How the status line starts while a request for switch rows has failed. */
+/** How the message starts while a request for switch rows has failed. */
 const SW_FAILED = 'Switch rows failed: ';
 
 /**
@@ -981,13 +992,18 @@ function syncSwitches(): void {
       S.swFor = key;
       S.rev++;
       // an earlier failure no longer holds once rows arrive; any other message stays
-      if ($('status').textContent?.startsWith(SW_FAILED)) status('');
+      clearMessage(SW_FAILED);
       drawAll();
     },
     e => {
-      if (seq === swSeq) status(SW_FAILED + errText(e));
+      if (seq === swSeq) fail(SW_FAILED + errText(e), { label: 'Try again', run: retrySwitches });
     },
   );
+}
+/** Ask again for the rows of the span on screen, after a request for them failed. */
+function retrySwitches(): void {
+  swKey = '';
+  drawAll();
 }
 
 // ---------- frame loop ----------
@@ -1028,7 +1044,7 @@ async function addFiles(files: File[]): Promise<void> {
   const errs: string[] = [];
   const before = S.pulls.length;
   for (const f of files) {
-    status('Reading ' + f.name);
+    progress('Reading ' + f.name);
     try {
       await api.loadText(f.name, await f.text());
       added++;
@@ -1041,12 +1057,14 @@ async function addFiles(files: File[]): Promise<void> {
   try {
     if (added) await reload();
     const pulls = S.pulls.length - before;
-    status(
+    const text =
       (added ? 'Added ' + added + (added > 1 ? ' logs, ' : ' log, ') + pulls + ' new ' + (pulls === 1 ? 'pull' : 'pulls') + '. ' : '') +
-        errs.join(' '),
-    );
+      errs.join(' ');
+    // a refused file is a failure, so the refusal stays on screen
+    if (errs.length) fail(text);
+    else say(text);
   } catch (e) {
-    status(errText(e));
+    fail(errText(e));
   }
   busy = false;
 }
@@ -1062,14 +1080,15 @@ async function scanWatch(quiet: boolean): Promise<void> {
     const r = await api.scanDir(S.watchDir);
     if (r.added.length) await reload();
     if (r.added.length || r.errors.length || !quiet) {
-      status(
+      const text =
         (r.added.length
           ? 'Added ' + r.added.length + (r.added.length > 1 ? ' logs' : ' log') + ' from the watch folder. '
-          : 'No new logs in the watch folder. ') + r.errors.join(' '),
-      );
+          : 'No new logs in the watch folder. ') + r.errors.join(' ');
+      if (r.errors.length) fail(text);
+      else say(text);
     }
   } catch (e) {
-    status(errText(e));
+    fail(errText(e));
   }
   busy = false;
 }
@@ -1095,6 +1114,7 @@ function setWatch(dir: string): void {
 // ---------- events ----------
 
 function wire(): void {
+  wireMessages();
   const segs = (attr: string, fn: (v: string) => void) =>
     document.querySelectorAll('[' + attr + ']').forEach(b =>
       b.addEventListener('click', () => {
@@ -1419,8 +1439,8 @@ function wire(): void {
   });
   onLogsChanged(msg => {
     reload().then(
-      () => status(msg),
-      e => status(errText(e)),
+      () => say(msg),
+      e => fail(errText(e)),
     );
   });
 
@@ -1434,7 +1454,7 @@ function wire(): void {
         const dir = await pickFolder();
         if (dir) setWatch(dir);
       } catch (e) {
-        status(errText(e));
+        fail(errText(e));
       }
     });
     input('watch-in').addEventListener('keydown', e => {
@@ -1445,7 +1465,7 @@ function wire(): void {
       S.watchDir = '';
       renderWatch();
       saveSettings();
-      status('Stopped watching. Logs already added stay in the library.');
+      say('Stopped watching. Logs already added stay in the library.');
     });
     window.addEventListener('focus', () => {
       if (Date.now() - lastScan > 5000) void scanWatch(true);
@@ -1470,6 +1490,17 @@ function wire(): void {
 
 // ---------- boot ----------
 
+/** Read the library for the first time. A failure offers to try again. */
+async function openLibrary(): Promise<void> {
+  try {
+    await reload();
+    clearMessage(LIBRARY_FAILED);
+  } catch (e) {
+    $('sub').textContent = 'The library could not be opened';
+    fail(LIBRARY_FAILED + errText(e), { label: 'Try again', run: () => void openLibrary() });
+  }
+}
+
 export async function boot(): Promise<void> {
   const sel = $<HTMLSelectElement>('v-model');
   for (const c of CATALOG) {
@@ -1486,7 +1517,7 @@ export async function boot(): Promise<void> {
   try {
     st = (await api.getSettings()) || {};
   } catch (e) {
-    status('Could not read saved settings: ' + errText(e));
+    fail('Could not read saved settings: ' + errText(e));
   }
   const veh = { ...VEH_DEFAULT, ...(st.veh || {}) };
   for (const k in VEH_IDS) input(VEH_IDS[k]).value = String(veh[k]);
@@ -1512,12 +1543,7 @@ export async function boot(): Promise<void> {
   renderWatch();
   renderViewSel();
 
-  try {
-    await reload();
-  } catch (e) {
-    $('sub').textContent = 'The library could not be opened';
-    status(errText(e));
-  }
+  await openLibrary();
   syncTableControls();
   requestAnimationFrame(frame);
   if (!isMobile && S.watchDir) void scanWatch(true);

@@ -66,7 +66,6 @@ ol,ul{list-style:none}
 .top h1{font-family:var(--font-display);font-weight:900;font-size:23px;line-height:1.05;letter-spacing:.05em;text-transform:uppercase}
 .top .sub{color:var(--ink-2);font-size:13px;font-weight:400;margin-top:6px;font-variant-numeric:tabular-nums}
 .row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}
-#status{color:var(--ink-2);font-size:12.5px;max-width:46ch}
 .layout{display:grid;grid-template-columns:344px minmax(0,1fr);gap:14px;align-items:start}
 .rail,.main{display:grid;gap:14px;min-width:0}
 .rail{position:sticky;top:calc(env(safe-area-inset-top,0px) + 14px);max-height:calc(100vh - 28px);max-height:calc(100dvh - 28px);overflow-y:auto;border-radius:12px;overscroll-behavior:contain}
@@ -234,6 +233,13 @@ table{border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:13px}
 #tip .tr b{font-weight:700;white-space:nowrap}
 #tip .tk{display:inline-flex;align-items:center;gap:6px;color:var(--ink-2)}
 #tip .tk i{display:inline-block;width:12px;border-top:2px solid var(--ink-3);flex:none}
+/* the message area: one line fixed to the bottom of the window, drawn as the tooltip is. It is always in the page,
+   so the live region inside it is read; without .on it cannot be seen or clicked */
+.msg{position:fixed;z-index:15;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);transform:translateX(-50%);display:flex;align-items:center;gap:10px;width:max-content;max-width:min(640px,calc(100vw - 32px));background:var(--surface);color:var(--ink-2);border:1px solid var(--rule);border-radius:12px;padding:8px 10px 8px 14px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .14s}
+.msg.on{opacity:1;pointer-events:auto}
+.msg.fail{color:var(--ink)}
+#status{min-width:0;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+.msg .btn{flex:none}
 body.dropping .app{outline:2px dashed var(--ink-2);outline-offset:6px;border-radius:12px}
 
 @media (max-width:1120px){ .main{grid-template-columns:minmax(0,1fr)} }

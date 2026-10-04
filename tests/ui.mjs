@@ -146,6 +146,29 @@ try {
     /notes\.csv: /.test(await text(page, 'status')),
     await text(page, 'status'),
   );
+  // the refusal is a failure: it is at the bottom of the window, not in the header, and stays until it is dismissed
+  const refusal = await page.evaluate(() => {
+    const m = document.getElementById('msg');
+    if (!m) return { on: false };
+    const r = m.getBoundingClientRect();
+    return {
+      on: m.classList.contains('on'),
+      fail: m.classList.contains('fail'),
+      atBottom: r.bottom <= innerHeight && r.top >= innerHeight - 140,
+      dismiss: !document.getElementById('msg-x').hidden,
+      inHeader: !!document.querySelector('header #status'),
+    };
+  });
+  check(
+    'a failure is shown at the bottom of the window with Dismiss',
+    refusal.on && refusal.fail && refusal.atBottom && refusal.dismiss && !refusal.inHeader,
+    JSON.stringify(refusal),
+  );
+  if (refusal.dismiss) await page.click('#msg-x');
+  check(
+    'Dismiss clears it',
+    (await text(page, 'status')) === '' && !(await page.evaluate(() => document.getElementById('msg')?.classList.contains('on'))),
+  );
   await importLogs(page);
   await settle(page);
   check('all logs imported', /^Added 8 logs, 10 new pulls\./.test(await text(page, 'status')), await text(page, 'status'));
@@ -520,7 +543,7 @@ try {
     JSON.stringify([off.rows, off.now, off.height, asked.length - askedBefore]),
   );
 
-  // a failed request says so in the status line; when rows come back for the span, the message goes
+  // a failed request says so in the message area; when rows come back for the span, the message goes
   const errorsBefore = errors.length;
   await page.route('**/api/switches', route => route.abort(), { times: 1 });
   await box.check();
@@ -543,6 +566,28 @@ try {
   await box.check();
   await rowsShown(page, 8);
   check('rows that arrive leave any other message alone', (await text(page, 'status')) === 'Added 1 log.', await text(page, 'status'));
+  // Try again asks for the rows again
+  await box.uncheck();
+  const errorsBeforeRetry = errors.length;
+  await page.route('**/api/switches', route => route.abort(), { times: 1 });
+  await box.check();
+  const failedAgain = await until(page, () => /^Switch rows failed: /.test(document.getElementById('status').textContent));
+  const offered = await page.evaluate(() => {
+    const b = document.getElementById('msg-act');
+    return b && !b.hidden ? b.textContent : null;
+  });
+  if (offered) await page.click('#msg-act');
+  const rowsAfterRetry = await rowsShown(page, 8);
+  check(
+    'Try again brings the rows back and clears the message',
+    failedAgain && offered === 'Try again' && rowsAfterRetry && (await text(page, 'status')) === '',
+    JSON.stringify([failedAgain, offered, rowsAfterRetry, await text(page, 'status')]),
+  );
+  errors.splice(
+    errorsBeforeRetry,
+    errors.length - errorsBeforeRetry,
+    ...errors.slice(errorsBeforeRetry).filter(m => !/ERR_FAILED/.test(m)),
+  );
   await box.uncheck();
   await page.click('[data-smooth="high"]');
   await page.waitForTimeout(600); // settings are written a moment after the last change
@@ -661,6 +706,30 @@ try {
   check(
     'watch folder imports a new log',
     (await text(page, 'status')) === 'Added 1 log from the watch folder. ' && (await page.locator('#logs .log').count()) === 8,
+    await text(page, 'status'),
+  );
+  // a result stays in view when the page is scrolled to its end, and clears itself
+  await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+  const inView = await page.evaluate(() => {
+    const r = document.getElementById('msg')?.getBoundingClientRect();
+    return !!r && r.bottom <= innerHeight && r.top >= innerHeight - 140;
+  });
+  const cleared = await page
+    .waitForFunction(() => document.getElementById('status').textContent === '', null, { timeout: 8000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  check('a result stays in view when the page scrolls, and clears itself', inView && cleared, JSON.stringify([inView, cleared]));
+  // a failure that replaces a result is not cleared by the result's clock
+  await page.click('#watch-scan');
+  await page.waitForFunction(() => /^No new logs/.test(document.getElementById('status').textContent));
+  await page.setInputFiles('#file', [{ name: 'notes.csv', mimeType: 'text/csv', buffer: Buffer.from('a,b\n1,2\n') }]);
+  await page.waitForFunction(() => /notes\.csv: /.test(document.getElementById('status').textContent));
+  await page.waitForTimeout(6000);
+  check(
+    'a failure outlasts the clock of the result it replaced',
+    /notes\.csv: /.test(await text(page, 'status')),
     await text(page, 'status'),
   );
   await page.close();

@@ -39,7 +39,7 @@ try {
     await libraryOpen(page);
     if ((await page.locator('#logs .log').count()) === 0) {
       await importLogs(page);
-      // a fresh page drops the message about the import from the header
+      // a fresh page drops the message about the import
       await page.reload();
       await libraryOpen(page);
     }
