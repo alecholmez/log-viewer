@@ -1,0 +1,164 @@
+/* The Log Viewer website. Type and corner radii are the app's (src/styles.css). The palette comes from the app icon: graphite, off-white, and the orange of its torque curve as the one accent. */
+
+@font-face{font-family:"Lato";font-weight:400;font-style:normal;font-display:swap;src:url(fonts/lato-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:"Lato";font-weight:700;font-style:normal;font-display:swap;src:url(fonts/lato-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:"Lato";font-weight:900;font-style:normal;font-display:swap;src:url(fonts/lato-latin-900-normal.woff2) format("woff2")}
+
+:root{
+  /* --surface is the app's panel colour, so a screenshot of a panel has no visible edge on it */
+  --bg:#f6f7f8; --surface:#fbfcfd; --inset:#eceef1;
+  --ink:#0e1116; --ink-2:#4b525d;
+  --grid:#e3e6ea; --rule:#cfd4db;
+  /* text on the accent is the dark ink in both themes: white on this orange is too faint */
+  --accent:#e0602b; --accent-2:#d15524; --on-accent:#0e1116;
+  --shade:14 17 22;
+  /* controls 6px, boxes 10px */
+  --r-ui:6px; --r-box:10px;
+  --ease:cubic-bezier(.16,1,.3,1);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0a0c0f; --surface:#161a20; --inset:#1e232b;
+    --ink:#f2f4f6; --ink-2:#b6bdc7;
+    --grid:#262c35; --rule:#3a424e;
+    --accent:#ea7a48; --accent-2:#f08a5c;
+    --shade:2 3 5;
+  }
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 1.0625rem/1.55 "Lato","Helvetica Neue",Arial,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+h1,h2,h3,p,figure,dl,dd,ul{margin:0}
+ul{padding:0;list-style:none}
+img,picture{display:block}
+img{max-width:100%;height:auto}
+a{color:inherit}
+svg{fill:currentColor;flex:none}
+.sprite{position:absolute;width:0;height:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+[id]{scroll-margin-top:24px}
+
+.wrap{max-width:1200px;margin-inline:auto;padding-inline:24px}
+
+/* controls */
+.btn{display:inline-flex;align-items:center;gap:8px;padding:13px 20px;border:1px solid var(--rule);border-radius:var(--r-ui);background:var(--surface);color:var(--ink);font-weight:700;font-size:1rem;line-height:1.2;text-decoration:none;white-space:nowrap;transition:background-color .2s var(--ease),border-color .2s var(--ease),transform .2s var(--ease)}
+.btn:hover{background:var(--inset)}
+.btn:active{transform:translateY(1px)}
+.btn svg{width:19px;height:19px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.primary:hover{background:var(--accent-2);border-color:var(--accent-2)}
+.btn.sm{padding:9px 15px;font-size:.9375rem}
+.link{display:inline-flex;align-items:center;gap:6px;font-weight:700;text-decoration:underline;text-decoration-color:var(--rule);text-decoration-thickness:1px;text-underline-offset:4px;transition:text-decoration-color .2s var(--ease)}
+.link:hover{text-decoration-color:var(--accent)}
+.link svg{width:15px;height:15px;color:var(--accent)}
+
+/* top bar */
+.nav{display:flex;align-items:center;gap:18px;height:68px}
+.brand{display:inline-flex;align-items:center;gap:8px;margin-right:auto;font-weight:900;font-size:1.0625rem;letter-spacing:.05em;text-transform:uppercase;text-decoration:none}
+.nav-links{display:flex;gap:28px;margin-right:14px}
+.nav-links a{font-size:.9375rem;color:var(--ink-2);text-decoration:none;transition:color .2s var(--ease)}
+.nav-links a:hover{color:var(--ink)}
+.nav-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:var(--r-ui);color:var(--ink-2);transition:color .2s var(--ease),background-color .2s var(--ease)}
+.nav-icon:hover{color:var(--ink);background:var(--inset)}
+.nav-icon svg{width:22px;height:22px}
+
+/* hero: the app runs off the right edge of the window */
+.hero{overflow-x:clip;padding-block:64px 104px}
+.hero-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:56px;align-items:center}
+h1{font-weight:900;font-size:clamp(2.375rem,4.3vw,3.25rem);line-height:1.05;letter-spacing:-.015em;text-wrap:balance}
+.lede{margin-top:20px;max-width:34ch;font-size:1.1875rem;line-height:1.5;color:var(--ink-2)}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
+.hero-shot{width:clamp(720px,68vw,960px);border:1px solid var(--rule);border-radius:var(--r-box);overflow:hidden;box-shadow:0 36px 70px -36px rgb(var(--shade) / .38),0 2px 8px rgb(var(--shade) / .06)}
+.hero-shot img{width:100%}
+
+/* sections */
+.section{padding-block:88px}
+.section-head{max-width:40rem}
+h2{font-weight:900;font-size:clamp(1.75rem,3vw,2.375rem);line-height:1.1;letter-spacing:-.01em;text-wrap:balance}
+.section-head p{margin-top:14px;max-width:56ch;font-size:1.125rem;color:var(--ink-2)}
+.section-head .link{margin-top:22px}
+h3{font-weight:700;font-size:1.1875rem;line-height:1.25}
+figcaption{color:var(--ink-2)}
+.frame{padding:20px;border:1px solid var(--grid);border-radius:var(--r-box);background:var(--surface)}
+
+/* findings: the panel fades out where the list carries on */
+.findings-shot{margin-top:48px}
+.findings-shot img{width:100%;border-radius:9px;-webkit-mask-image:linear-gradient(#000 58%,transparent);mask-image:linear-gradient(#000 58%,transparent)}
+.findings-shot figcaption{margin-top:4px;font-size:.9375rem}
+
+/* charts: two panels side by side as in the app, then the replay across */
+.charts{display:grid;grid-template-columns:556fr 464fr;column-gap:16px;margin-top:48px}
+/* picture and caption share the rows of the grid, so the two captions start level */
+.chart{display:grid;grid-row:span 2;grid-template-rows:subgrid}
+.chart img{width:100%;border-radius:9px}
+.chart h3{color:var(--ink)}
+.chart figcaption{margin-top:20px;padding-right:24px}
+.chart figcaption p{margin-top:6px;max-width:46ch}
+.chart.wide{grid-column:1 / -1;grid-row:auto;grid-template:auto / minmax(0,2fr) minmax(0,1fr);gap:40px;align-items:start;margin-top:64px}
+.chart.wide figcaption{margin-top:4px;padding-right:0}
+
+/* formats: what is read, and how logs get in */
+.formats{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:72px;align-items:start}
+.ways > div{display:grid;grid-template-columns:10rem minmax(0,1fr);gap:24px;padding-block:18px;border-top:1px solid var(--rule)}
+.ways > div:first-child{padding-top:6px;border-top:0}
+.ways dt{font-weight:700}
+.ways dd{color:var(--ink-2)}
+
+/* downloads */
+.downloads{margin-block:40px 28px;border:1px solid var(--grid);border-radius:var(--r-box);background:var(--surface)}
+.downloads li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:18px;padding:20px 24px}
+.downloads li + li{border-top:1px solid var(--grid)}
+.downloads svg{width:30px;height:30px}
+.downloads .name{font-weight:700;line-height:1.3}
+.downloads .req{font-size:.9375rem;color:var(--ink-2)}
+.soon{padding:8px 12px;border:1px solid var(--rule);border-radius:var(--r-ui);font-size:.875rem;font-weight:700;line-height:1.2;color:var(--ink-2);white-space:nowrap}
+
+footer{margin-top:24px;padding-block:36px 56px;border-top:1px solid var(--rule);font-size:.9375rem;color:var(--ink-2)}
+.foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:14px 40px}
+.foot nav{display:flex;gap:24px}
+.foot a{text-underline-offset:3px;text-decoration-color:var(--rule)}
+.foot a:hover{color:var(--ink)}
+
+/* tablet and phone: one column */
+@media (max-width: 899px){
+  .nav-links{display:none}
+  .hero{padding-block:40px 72px}
+  .hero-grid{grid-template-columns:minmax(0,1fr);gap:44px}
+  /* one finding stands in for the window */
+  .hero-shot{width:auto;max-width:519px;padding:12px;border-color:var(--grid);background:var(--surface);box-shadow:none}
+  .hero-shot img{border-radius:6px}
+  .section{padding-block:64px}
+  .charts{grid-template-columns:minmax(0,1fr);row-gap:48px}
+  .chart,.chart.wide{display:block;margin-top:0}
+  .chart:not(.wide) img{max-width:556px}
+  .chart.wide figcaption{margin-top:20px}
+  .frame{padding:12px}
+  .formats{grid-template-columns:minmax(0,1fr);gap:40px}
+}
+@media (max-width: 719px){
+  /* one finding in place of the panel */
+  .findings-shot picture{max-width:519px;padding:12px;border:1px solid var(--grid);border-radius:var(--r-box);background:var(--surface)}
+  .findings-shot img{border-radius:6px;-webkit-mask-image:none;mask-image:none}
+  .findings-shot figcaption{margin-top:14px}
+}
+@media (max-width: 519px){
+  .wrap{padding-inline:18px}
+  .ways > div{grid-template-columns:minmax(0,1fr);gap:2px}
+  .downloads li{gap:14px;padding:16px}
+  .downloads svg{width:26px;height:26px}
+}
+
+/* motion: the hero arrives in reading order, and the screenshots lower down come in as they are scrolled to */
+@keyframes rise{from{opacity:0;transform:translateY(14px)}}
+@keyframes slide{from{opacity:0;transform:translateX(28px)}}
+@media (prefers-reduced-motion: no-preference){
+  html{scroll-behavior:smooth}
+  .hero-copy > *{animation:rise .7s var(--ease) both}
+  .hero-copy > :nth-child(2){animation-delay:.08s}
+  .hero-copy > :nth-child(3){animation-delay:.16s}
+  .hero-shot{animation:slide .9s var(--ease) .14s both}
+  @supports (animation-timeline: view()){
+    .reveal{animation:rise linear both;animation-timeline:view();animation-range:entry 0% entry 38%}
+  }
+}

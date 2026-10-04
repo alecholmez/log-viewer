@@ -71,6 +71,7 @@ src                TypeScript. The UI: DOM and canvas, no framework.
   state.ts           app state, constants, shared helpers
 tests/ui.mjs       end-to-end test of the UI against the real core
 testdata/logs      eight real logs the tests run on
+site               the website: one static page, published to GitHub Pages
 ```
 
 Every platform runs the same `Session::dispatch`. The UI asks for `logs`, `log_data`, `overview`, `dyno` and so on, and draws what comes back. Numbers are computed in Rust; the UI only formats them.
@@ -93,6 +94,18 @@ To work on the UI in a browser without the native shell:
 npm run core -- --dir .logviewer    # the core on http://127.0.0.1:1430
 npm run dev                         # the UI on http://localhost:1420
 ```
+
+## Website
+
+`site/` is the page that hosts the downloads: plain HTML and CSS with no build step. `.github/workflows/pages.yml` publishes it to GitHub Pages on a push that changes it.
+
+```sh
+npm run build && cargo build --release -p logviewer-dev
+npm run site:shots                     # retake the screenshots from the real UI, light and dark
+python3 -m http.server 4173 -d site    # then open http://localhost:4173
+```
+
+The screenshots are the app itself on the logs in `testdata/logs`, so retake them after a change to the UI. Opened as a file the page gets no fonts; serve it as above. The download rows say "Coming soon" until there is a release to link to.
 
 ## Adding an ECU
 

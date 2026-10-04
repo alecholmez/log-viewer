@@ -5,40 +5,13 @@
 // Starts the dev server on a throwaway library, imports the logs in testdata/logs through the UI and walks the main flows.
 // Set CHROME=/path/to/chrome to use a browser Playwright did not download. Pass a directory to save screenshots there.
 
-import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, copyFileSync, readdirSync, rmSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, copyFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright';
+import { root, logs, startServer, libraryOpen, importLogs } from './server.mjs';
 
-const root = resolve(import.meta.dirname, '..');
 const shots = process.argv[2] ? resolve(process.argv[2]) : null;
-const port = 1439;
-const tmp = mkdtempSync(join(tmpdir(), 'logviewer-test-'));
-const bin = join(root, 'target', 'release', process.platform === 'win32' ? 'logviewer-dev.exe' : 'logviewer-dev');
-if (!existsSync(bin)) throw new Error('Build the dev server first: cargo build --release -p logviewer-dev');
-if (!existsSync(join(root, 'dist', 'index.html'))) throw new Error('Build the UI first: npm run build');
-const logs = readdirSync(join(root, 'testdata', 'logs'))
-  .filter(f => f.endsWith('.csv'))
-  .sort()
-  .map(f => join(root, 'testdata', 'logs', f));
-
-const url = 'http://127.0.0.1:' + port + '/';
-// a server left over from an earlier run would answer in place of the one started here, with its old library and old core
-const portInUse = await fetch(url).then(
-  () => true,
-  () => false,
-);
-if (portInUse) throw new Error('Port ' + port + ' is in use. Stop the process listening on it, then run the test again.');
-const server = spawn(bin, ['--port', String(port), '--dir', join(tmp, 'library'), '--dist', join(root, 'dist')], { stdio: 'ignore' });
-for (let i = 0; i < 50; i++) {
-  try {
-    await (await fetch(url)).text();
-    break;
-  } catch {
-    await new Promise(r => setTimeout(r, 100));
-  }
-}
+const { url, tmp, stop } = await startServer(1439);
 
 let failed = 0;
 const check = (name, ok, detail = '') => {
@@ -57,7 +30,7 @@ try {
     // a refused import is an HTTP 400 from the dev server, which the browser reports on the console; that is expected here
     page.on('console', m => m.type() === 'error' && !/status of 400/.test(m.text()) && errors.push(m.text()));
     await page.goto(url);
-    await page.waitForFunction(() => document.getElementById('sub').textContent !== 'Opening the library');
+    await libraryOpen(page);
     return page;
   };
   const text = (page, id) => page.evaluate(i => document.getElementById(i).textContent, id);
@@ -77,8 +50,7 @@ try {
     /notes\.csv: /.test(await text(page, 'status')),
     await text(page, 'status'),
   );
-  await page.setInputFiles('#file', logs);
-  await page.waitForFunction(n => document.querySelectorAll('#logs .log').length === n, logs.length, { timeout: 30000 });
+  await importLogs(page);
   await settle(page);
   check('all logs imported', /^Added 8 logs, 10 new pulls\./.test(await text(page, 'status')), await text(page, 'status'));
   check(
@@ -238,7 +210,7 @@ try {
   const saved = await (await fetch(url + 'api/get_settings', { method: 'POST', body: '{}' })).json();
   await fetch(url + 'api/set_settings', { method: 'POST', body: JSON.stringify({ value: { ...saved, smooth: 'constructor' } }) });
   await page.reload();
-  await page.waitForFunction(() => document.getElementById('sub').textContent !== 'Opening the library');
+  await libraryOpen(page);
   await settle(page);
   const fallback = await page.evaluate(() => ({
     state: window.__logViewer.smooth,
@@ -299,8 +271,7 @@ try {
   check('no page errors', errors.length === 0, errors.join(' | '));
 } finally {
   await browser?.close();
-  server.kill();
-  rmSync(tmp, { recursive: true, force: true });
+  stop();
 }
 console.log(failed ? failed + ' check(s) failed' : 'all checks passed');
 process.exit(failed ? 1 : 0);

@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Log Viewer: ECU log analysis with a virtual dyno</title>
+    <meta
+      name="description"
+      content="Log Viewer reads Haltech NSP logs, estimates wheel power from each pull, and lists what to change in the tune. Open source, for macOS, Windows, iPhone and iPad."
+    />
+    <link rel="canonical" href="https://alecholmez.github.io/log-viewer/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Log Viewer" />
+    <meta property="og:description" content="Reads ECU logs, estimates wheel power from each pull, and lists what to change in the tune." />
+    <meta property="og:url" content="https://alecholmez.github.io/log-viewer/" />
+    <meta property="og:image" content="https://alecholmez.github.io/log-viewer/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="icon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="icon-256.png" />
+    <link rel="preload" href="fonts/lato-latin-900-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="fonts/lato-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Icons: Phosphor, regular weight (MIT). https://phosphoricons.com -->
+    <svg xmlns="http://www.w3.org/2000/svg" class="sprite" aria-hidden="true">
+      <symbol id="i-github" viewBox="0 0 256 256">
+        <path
+          d="M208.31,75.68A59.78,59.78,0,0,0,202.93,28,8,8,0,0,0,196,24a59.75,59.75,0,0,0-48,24H124A59.75,59.75,0,0,0,76,24a8,8,0,0,0-6.93,4,59.78,59.78,0,0,0-5.38,47.68A58.14,58.14,0,0,0,56,104v8a56.06,56.06,0,0,0,48.44,55.47A39.8,39.8,0,0,0,96,192v8H72a24,24,0,0,1-24-24A40,40,0,0,0,8,136a8,8,0,0,0,0,16,24,24,0,0,1,24,24,40,40,0,0,0,40,40H96v16a8,8,0,0,0,16,0V192a24,24,0,0,1,48,0v40a8,8,0,0,0,16,0V192a39.8,39.8,0,0,0-8.44-24.53A56.06,56.06,0,0,0,216,112v-8A58.14,58.14,0,0,0,208.31,75.68ZM200,112a40,40,0,0,1-40,40H112a40,40,0,0,1-40-40v-8a41.74,41.74,0,0,1,6.9-22.48A8,8,0,0,0,80,73.83a43.81,43.81,0,0,1,.79-33.58,43.88,43.88,0,0,1,32.32,20.06A8,8,0,0,0,119.82,64h32.35a8,8,0,0,0,6.74-3.69,43.87,43.87,0,0,1,32.32-20.06A43.81,43.81,0,0,1,192,73.83a8.09,8.09,0,0,0,1,7.65A41.72,41.72,0,0,1,200,104Z"
+        />
+      </symbol>
+      <symbol id="i-arrow" viewBox="0 0 256 256">
+        <path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z" />
+      </symbol>
+      <symbol id="i-apple" viewBox="0 0 256 256">
+        <path
+          d="M223.3,169.59a8.07,8.07,0,0,0-2.8-3.4C203.53,154.53,200,134.64,200,120c0-17.67,13.47-33.06,21.5-40.67a8,8,0,0,0,0-11.62C208.82,55.74,187.82,48,168,48a72.2,72.2,0,0,0-40,12.13,71.56,71.56,0,0,0-90.71,9.09A74.63,74.63,0,0,0,16,123.4a127.06,127.06,0,0,0,40.14,89.73A39.8,39.8,0,0,0,83.59,224h87.68a39.84,39.84,0,0,0,29.12-12.57,125,125,0,0,0,17.82-24.6C225.23,174,224.33,172,223.3,169.59Zm-34.63,30.94a23.76,23.76,0,0,1-17.4,7.47H83.59a23.82,23.82,0,0,1-16.44-6.51A111.14,111.14,0,0,1,32,123,58.5,58.5,0,0,1,48.65,80.47,54.81,54.81,0,0,1,88,64h.78A55.45,55.45,0,0,1,123,76.28a8,8,0,0,0,10,0A55.44,55.44,0,0,1,168,64a70.64,70.64,0,0,1,36,10.35c-13,14.52-20,30.47-20,45.65,0,23.77,7.64,42.73,22.18,55.3A105.82,105.82,0,0,1,188.67,200.53ZM128.23,30A40,40,0,0,1,167,0h1a8,8,0,0,1,0,16h-1a24,24,0,0,0-23.24,18,8,8,0,1,1-15.5-4Z"
+        />
+      </symbol>
+      <symbol id="i-windows" viewBox="0 0 256 256">
+        <path
+          d="M208,136H128a8,8,0,0,0-8,8v57.45a8,8,0,0,0,6.57,7.88l80,14.54A7.61,7.61,0,0,0,208,224a8,8,0,0,0,8-8V144A8,8,0,0,0,208,136Zm-8,70.41-64-11.63V152h64ZM96,136H32a8,8,0,0,0-8,8v40a8,8,0,0,0,6.57,7.87l64,11.64a8.54,8.54,0,0,0,1.43.13,8,8,0,0,0,8-8V144A8,8,0,0,0,96,136Zm-8,50.05-48-8.73V152H88ZM213.13,33.86a8,8,0,0,0-6.56-1.73l-80,14.55A8,8,0,0,0,120,54.55V112a8,8,0,0,0,8,8h80a8,8,0,0,0,8-8V40A8,8,0,0,0,213.13,33.86ZM200,104H136V61.22l64-11.63ZM101.13,54.22a8,8,0,0,0-6.56-1.73l-64,11.64A8,8,0,0,0,24,72v40a8,8,0,0,0,8,8H96a8,8,0,0,0,8-8V60.36A8,8,0,0,0,101.13,54.22ZM88,104H40V78.68L88,70Z"
+        />
+      </symbol>
+      <symbol id="i-mobile" viewBox="0 0 256 256">
+        <path
+          d="M176,16H80A24,24,0,0,0,56,40V216a24,24,0,0,0,24,24h96a24,24,0,0,0,24-24V40A24,24,0,0,0,176,16ZM72,64H184V192H72Zm8-32h96a8,8,0,0,1,8,8v8H72V40A8,8,0,0,1,80,32Zm96,192H80a8,8,0,0,1-8-8v-8H184v8A8,8,0,0,1,176,224Z"
+        />
+      </symbol>
+    </svg>
+
+    <header class="wrap nav">
+      <a class="brand" href="./"><img src="icon-64.png" width="34" height="34" alt="" />Log Viewer</a>
+      <nav class="nav-links" aria-label="Sections">
+        <a href="#findings">Findings</a>
+        <a href="#charts">Charts</a>
+        <a href="#formats">Formats</a>
+      </nav>
+      <a class="nav-icon" href="https://github.com/alecholmez/log-viewer" aria-label="View on GitHub">
+        <svg aria-hidden="true"><use href="#i-github" /></svg>
+      </a>
+      <a class="btn primary sm" href="#download">Download</a>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="wrap hero-grid">
+          <div class="hero-copy">
+            <h1>Know what to change in the tune.</h1>
+            <p class="lede">
+              Log Viewer reads Haltech NSP logs, estimates wheel power from each pull, and lists the changes to make, with numbers.
+            </p>
+            <div class="cta">
+              <a class="btn primary" href="#download">Download</a>
+              <a class="btn" href="https://github.com/alecholmez/log-viewer">
+                <svg aria-hidden="true"><use href="#i-github" /></svg>View on GitHub
+              </a>
+            </div>
+          </div>
+          <picture class="hero-shot">
+            <source
+              media="(max-width: 899px) and (prefers-color-scheme: dark)"
+              srcset="img/finding-boost-dark.webp"
+              width="495"
+              height="362"
+            />
+            <source media="(max-width: 899px)" srcset="img/finding-boost-light.webp" width="495" height="362" />
+            <source media="(prefers-color-scheme: dark)" srcset="img/hero-dark.webp" width="1400" height="900" />
+            <img
+              src="img/hero-light.webp"
+              width="1400"
+              height="900"
+              alt="Log Viewer with a set of logs loaded, showing what it found in them"
+              fetchpriority="high"
+            />
+          </picture>
+        </div>
+      </section>
+
+      <section class="section" id="findings">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>Each finding says what to change</h2>
+            <p>Evidence from your log, why it matters, and numbered steps with values worked out from your data. Risks are listed first.</p>
+          </div>
+          <figure class="findings-shot reveal">
+            <picture>
+              <source
+                media="(max-width: 719px) and (prefers-color-scheme: dark)"
+                srcset="img/finding-fuel-dark.webp"
+                width="495"
+                height="441"
+              />
+              <source media="(max-width: 719px)" srcset="img/finding-fuel-light.webp" width="495" height="441" />
+              <source media="(prefers-color-scheme: dark)" srcset="img/findings-dark.webp" width="1034" height="700" />
+              <img
+                src="img/findings-light.webp"
+                width="1034"
+                height="700"
+                alt="Findings in Log Viewer, each with the readings it is based on, why it matters and numbered changes"
+                loading="lazy"
+              />
+            </picture>
+            <figcaption>These findings come from the logs the app is tested with.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section" id="charts">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>See the data behind each finding</h2>
+            <p>A finding opens the replay or the table it was read from, at the samples it describes.</p>
+          </div>
+          <div class="charts">
+            <figure class="chart reveal">
+              <picture>
+                <source media="(prefers-color-scheme: dark)" srcset="img/power-dark.webp" />
+                <img
+                  src="img/power-light.webp"
+                  width="556"
+                  height="638"
+                  alt="Estimated wheel power and torque against engine speed for three pulls"
+                  loading="lazy"
+                />
+              </picture>
+              <figcaption>
+                <h3>Wheel power from a road pull</h3>
+                <p>
+                  Mass times acceleration, plus drag and rolling resistance. Overlay up to three pulls from the same road to compare
+                  changes.
+                </p>
+              </figcaption>
+            </figure>
+            <figure class="chart reveal">
+              <picture>
+                <source media="(prefers-color-scheme: dark)" srcset="img/table-dark.webp" />
+                <img
+                  src="img/table-light.webp"
+                  width="464"
+                  height="638"
+                  alt="Ignition table drawn in 3D, with the path of one pull across it"
+                  loading="lazy"
+                />
+              </picture>
+              <figcaption>
+                <h3>Ignition and fuel tables</h3>
+                <p>Built from your logs by engine speed and manifold pressure. The fuel table shows the correction each cell needs.</p>
+              </figcaption>
+            </figure>
+            <figure class="chart wide reveal">
+              <picture class="frame">
+                <source media="(prefers-color-scheme: dark)" srcset="img/replay-dark.webp" />
+                <img
+                  src="img/replay-light.webp"
+                  width="1004"
+                  height="612"
+                  alt="Replay of a pull: readouts at the playhead above traces of engine speed, pedal, manifold pressure, lambda, ignition and knock"
+                  loading="lazy"
+                />
+              </picture>
+              <figcaption>
+                <h3>Replay</h3>
+                <p>Step through a pull by time or by RPM, on any channel the ECU logged. Save the views you use.</p>
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="formats">
+        <div class="wrap formats">
+          <div class="section-head">
+            <h2>Haltech NSP logs today</h2>
+            <p>Laptop logs saved by NSP open as they are. Link ECU logs are next, and more will follow.</p>
+            <a class="link" href="https://github.com/alecholmez/log-viewer/issues/new">
+              Request a format<svg aria-hidden="true"><use href="#i-arrow" /></svg>
+            </a>
+          </div>
+          <dl class="ways reveal">
+            <div>
+              <dt>Add logs</dt>
+              <dd>Pick one file or many. A log that is already in the library is not added twice.</dd>
+            </div>
+            <div>
+              <dt>Drag and drop</dt>
+              <dd>Drop files on the window, or open a CSV with Log Viewer.</dd>
+            </div>
+            <div>
+              <dt>Watch folder</dt>
+              <dd>Point the app at a synced folder. New logs from the tuning laptop are added when the app opens.</dd>
+            </div>
+            <div>
+              <dt>On your device</dt>
+              <dd>Logs are copied into the app’s own library. Nothing is uploaded.</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="section" id="download">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>Download</h2>
+            <p>Installers are not published yet. Until they are, the app can be built from source.</p>
+          </div>
+          <ul class="downloads reveal">
+            <li>
+              <svg aria-hidden="true"><use href="#i-apple" /></svg>
+              <div>
+                <p class="name">macOS</p>
+                <p class="req">macOS 11 or later</p>
+              </div>
+              <span class="soon">Coming soon</span>
+            </li>
+            <li>
+              <svg aria-hidden="true"><use href="#i-windows" /></svg>
+              <div>
+                <p class="name">Windows</p>
+                <p class="req">Windows 10 and 11</p>
+              </div>
+              <span class="soon">Coming soon</span>
+            </li>
+            <li>
+              <svg aria-hidden="true"><use href="#i-mobile" /></svg>
+              <div>
+                <p class="name">iPhone and iPad</p>
+                <p class="req">iOS 15 or later</p>
+              </div>
+              <span class="soon">Coming soon</span>
+            </li>
+          </ul>
+          <a class="link" href="https://github.com/alecholmez/log-viewer#run-it">
+            Build from source<svg aria-hidden="true"><use href="#i-arrow" /></svg>
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap foot">
+        <p>Log Viewer is open source under the Apache 2.0 license. It is not affiliated with Haltech.</p>
+        <nav aria-label="Project">
+          <a href="https://github.com/alecholmez/log-viewer">View on GitHub</a>
+          <a href="https://github.com/alecholmez/log-viewer/issues">Issues</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

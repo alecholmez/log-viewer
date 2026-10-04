@@ -13,7 +13,8 @@
     "app:build": "tauri build",
     "core": "cargo run --release -p logviewer-dev --",
     "test:core": "cargo test --release -p logviewer-core",
-    "test:ui": "node tests/ui.mjs"
+    "test:ui": "node tests/ui.mjs",
+    "site:shots": "node tests/site-shots.mjs"
   },
   "dependencies": {
     "@fontsource/lato": "^5.2.0",
