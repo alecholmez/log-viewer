@@ -1,7 +1,7 @@
 // App state, constants and the small helpers every part of the UI uses.
 
 import { chan, chanMeta, clamp } from './data';
-import type { Dyno, DynoOut, Finding, Log, Pull, Sev, Table, TraceDef, Vehicle, View } from './types';
+import type { Dyno, DynoOut, Finding, Log, Pull, Sev, Switches, Table, TraceDef, Vehicle, View } from './types';
 
 export const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -261,6 +261,10 @@ export const S = {
   rev: 0,
   fview: null as FindingView | null,
   watchDir: '',
+  /** switch rows for the span on screen, as the core returned them; null when there are none to draw */
+  sw: null as Switches | null,
+  /** what each switch row reads at the playhead, as last drawn: On, Off, or – where there are no samples */
+  swNow: [] as string[],
 };
 
 /** The view on screen: a finding's own channels while one is being shown, otherwise the user's working view. */

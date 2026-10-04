@@ -37,6 +37,53 @@ try {
   const shot = async (page, name, full = false) => shots && (await page.screenshot({ path: join(shots, name + '.png'), fullPage: full }));
   const settle = page => page.waitForTimeout(250);
 
+  // geometry of the trace canvas, as in src/charts.ts: TG for the traces, SW for the switch rows under them
+  const TG = { l: 46, r: 92, lab: 17, ph: 53, gap: 6 };
+  const SW = { top: 10, lab: 14, bar: 8, gap: 4 };
+  const swPitch = SW.lab + SW.bar + SW.gap;
+  /** The replay as it stands: the span, the switch rows and what they read, and where the canvas puts them. */
+  const replay = page =>
+    page.evaluate(
+      ([l, r, pitch, gap]) => {
+        const s = window.__logViewer;
+        const traces = (s.fview || s.rview).traces.length;
+        return {
+          log: s.focus.log.name,
+          w0: s.focus.w0,
+          w1: s.focus.w1,
+          rows: s.sw ? s.sw.rows : null,
+          more: s.sw ? s.sw.more : null,
+          now: (s.swNow || []).join(),
+          height: document.getElementById('tr-wrap').offsetHeight,
+          note: document.getElementById('tr-note').textContent,
+          pw: document.getElementById('tr-cv').clientWidth - l - r,
+          bandY: traces * pitch - gap,
+        };
+      },
+      [TG.l, TG.r, TG.lab + TG.ph + TG.gap, TG.gap],
+    );
+  /** x on the canvas of a time in the span, and y of the middle of row k's bar. */
+  const xAt = (r, t) => TG.l + ((t - r.w0) / (r.w1 - r.w0)) * r.pw;
+  const barY = (r, k) => r.bandY + SW.top + k * swPitch + SW.lab + SW.bar / 2;
+  /** Put the playhead at t and redraw: pressing By time redraws and moves nothing. Returns what the rows read there. */
+  const playhead = async (page, t) => {
+    await page.evaluate(t => (window.__logViewer.t = t), t);
+    await page.click('[data-xmode="time"]');
+    return (await replay(page)).now;
+  };
+  /** One pixel of the trace canvas, and a colour token from the stylesheet, both as [r, g, b, a]. */
+  const pixel = (page, x, y) =>
+    page.evaluate(
+      ([x, y]) => [...document.getElementById('tr-cv').getContext('2d').getImageData(x, y, 1, 1).data],
+      [Math.round(x), Math.round(y)],
+    );
+  const token = (page, name) =>
+    page.evaluate(name => {
+      const hex = getComputedStyle(document.documentElement).getPropertyValue(name).trim().slice(1);
+      return [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16)).concat(255);
+    }, name);
+  const sameColour = (a, b) => a.every((v, i) => Math.abs(v - b[i]) <= 2);
+
   // empty library
   let page = await open();
   check('empty library says so', (await text(page, 'sub')) === 'No logs yet' && (await page.locator('#logs .empty').count()) === 1);
@@ -198,6 +245,80 @@ try {
   check('by-RPM traces', /own RPM/.test(await text(page, 'tr-note')));
   await page.click('[data-xmode="time"]');
   await shot(page, '06-replay', true);
+
+  // switch rows, drawn from rows put in by hand so that every case is on screen: on, off, no samples, rows left out.
+  // The 1:42 pm log has no switch that changes, so nothing else is drawn under its traces.
+  await page.locator('.log-head', { hasText: '1:42 pm log' }).locator('button', { hasText: 'Replay' }).click();
+  await settle(page);
+  const bare = await replay(page);
+  const putRows = more =>
+    page.evaluate(more => {
+      const s = window.__logViewer;
+      s.sw = {
+        rows: [
+          {
+            name: 'Clutch',
+            also: ['Clutch Input'],
+            // the second on span is 10 ms of an 18 s span: less than a pixel wide
+            on: [
+              [4, 8],
+              [14, 14.01],
+            ],
+            gaps: [[10, 12]],
+            changes: [4, 8, 14, 14.01],
+          },
+          { name: 'Fan', also: [], on: [[0, s.focus.w1]], gaps: [], changes: [] },
+        ],
+        more,
+      };
+      s.rev++;
+    }, more);
+  await putRows(2);
+  const read = [await playhead(page, 2), await playhead(page, 6), await playhead(page, 11)].join(' | ');
+  check('a switch row reads On, Off, or a dash where there are no samples', read === 'Off,On | On,On | –,On', read);
+  await playhead(page, 15); // clear of the pixels read next
+  let drawn = await replay(page);
+  check(
+    'two rows add their height under the traces',
+    drawn.height === bare.height + SW.top + 2 * swPitch,
+    bare.height + ' -> ' + drawn.height,
+  );
+  const [ink2, grid] = [await token(page, '--ink-2'), await token(page, '--grid')];
+  const bar = [];
+  for (const t of [6, 2, 11]) bar.push(await pixel(page, xAt(drawn, t), barY(drawn, 0)));
+  check(
+    'the bar is filled while the switch is on, plain while it is off and empty where there are no samples',
+    sameColour(bar[0], ink2) && sameColour(bar[1], grid) && bar[2][3] === 0,
+    JSON.stringify(bar),
+  );
+  const brief = await pixel(page, Math.floor(xAt(drawn, 14)), barY(drawn, 0));
+  check('a switch that is on for one sample still shows', sameColour(brief, ink2), JSON.stringify(brief));
+  check(
+    'the note says how many switches are left out',
+    / 2 more switches change in this span and are not shown\.$/.test(drawn.note),
+    drawn.note,
+  );
+  await putRows(1);
+  await playhead(page, 15);
+  drawn = await replay(page);
+  check('and counts one switch as one', / 1 more switch changes in this span and is not shown\.$/.test(drawn.note), drawn.note);
+  await shot(page, '06b-switch-rows', true);
+  await page.click('[data-xmode="rpm"]');
+  drawn = await replay(page);
+  check(
+    'By RPM hides the rows and says so',
+    drawn.height === bare.height && drawn.now === '' && / By RPM hides the switch rows\.$/.test(drawn.note),
+    JSON.stringify([drawn.height, drawn.now, drawn.note]),
+  );
+  await page.click('[data-xmode="time"]');
+  await page.evaluate(() => {
+    const s = window.__logViewer;
+    s.sw = null;
+    s.rev++;
+  });
+  await page.click('[data-xmode="time"]');
+  drawn = await replay(page);
+  check('with no rows the traces take the height they had', drawn.height === bare.height && drawn.now === '', String(drawn.height));
   await page.click('[data-smooth="high"]');
   await page.waitForTimeout(600); // settings are written a moment after the last change
   await page.close();
