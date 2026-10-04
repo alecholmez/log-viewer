@@ -39,6 +39,13 @@ pub fn type_info(ty: &str) -> (f64, f64, &'static str, u8) {
 /// NSP writes values near i32::MAX or i32::MIN for "no reading".
 pub const BAD: f64 = 2_147_480_000.0;
 
+/// Raw NSP values of a channel `Type` to engineering units: the type's scale and offset, NaN for "no reading".
+/// The type is looked up once, not per value.
+pub fn to_eng(ty: &str) -> impl Fn(f64) -> f64 {
+    let (s, o, _, _) = type_info(ty);
+    move |v| if v.abs() >= BAD { f64::NAN } else { v * s + o }
+}
+
 /// Channels the analysis uses, by NSP name.
 pub mod name {
     pub const RPM: &str = "RPM";

@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use crate::haltech::{name, type_info, Col, RawLog, BAD};
+use crate::haltech::{name, to_eng, Col, RawLog};
 use crate::switches::Switch;
 
 /// Key channels in engineering units. A channel the log does not have is all NaN.
@@ -58,8 +58,7 @@ pub struct Log {
 }
 
 fn scale(col: &Col, ty: &str, n: usize) -> Vec<f64> {
-    let (s, o, _, _) = type_info(ty);
-    let conv = |v: f64| if v.abs() >= BAD { f64::NAN } else { v * s + o };
+    let conv = to_eng(ty);
     match col {
         Col::Const(c) => vec![conv(*c); n],
         Col::Series(a) => a.iter().map(|&v| conv(v)).collect(),
@@ -125,8 +124,8 @@ impl Log {
         };
         let ranges = (raw.ranges.iter().zip(&raw.types))
             .map(|(range, ty)| {
-                let (s, o, _, _) = type_info(ty);
-                range.map(|[min, max]| [min * s + o, max * s + o])
+                let conv = to_eng(ty);
+                range.map(|[min, max]| [conv(min), conv(max)])
             })
             .collect();
         Ok(Log {

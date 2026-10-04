@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 
 use crate::dyno::{detect_pulls, dyno, Dyno, Pt, Pull, Vehicle};
 use crate::findings::{analyze_logs, check_pull, Finding};
-use crate::haltech::{parse_nsp_csv, type_info, Col, BAD};
+use crate::haltech::{parse_nsp_csv, to_eng, type_info, Col};
 use crate::log::Log;
 use crate::stats::median;
 use crate::switches::{switches, MAX_ROWS};
@@ -313,9 +313,9 @@ impl Session {
             .iter()
             .enumerate()
             .map(|(j, nm)| {
-                let (s, o, unit, d) = type_info(&log.types[j]);
+                let (_, _, unit, d) = type_info(&log.types[j]);
                 let value = match log.cols[j] {
-                    Col::Const(c) => Some(if c.abs() >= BAD { f64::NAN } else { c * s + o }),
+                    Col::Const(c) => Some(to_eng(&log.types[j])(c)),
                     Col::Series(_) => None,
                 };
                 ChannelMeta {
