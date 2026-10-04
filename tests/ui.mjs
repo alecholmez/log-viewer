@@ -29,6 +29,25 @@ try {
     page.on('pageerror', e => errors.push(e.message));
     // a refused import is an HTTP 400 from the dev server, which the browser reports on the console; that is expected here
     page.on('console', m => m.type() === 'error' && !/status of 400/.test(m.text()) && errors.push(m.text()));
+    // WCAG contrast of two colours as the page reports them, "#rrggbb" or "rgb(r, g, b)", for the contrast checks
+    await page.addInitScript(() => {
+      const parse = c =>
+        c[0] === '#'
+          ? [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16))
+          : c
+              .match(/[\d.]+/g)
+              .slice(0, 3)
+              .map(Number);
+      const lum = c => {
+        const [r, g, b] = parse(c.trim()).map(v => (v / 255 <= 0.03928 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4));
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      };
+      window.__contrast = (a, b) => {
+        const x = lum(a) + 0.05;
+        const y = lum(b) + 0.05;
+        return x > y ? x / y : y / x;
+      };
+    });
     await page.goto(url);
     await libraryOpen(page);
     return page;
@@ -36,6 +55,22 @@ try {
   const text = (page, id) => page.evaluate(i => document.getElementById(i).textContent, id);
   const shot = async (page, name, full = false) => shots && (await page.screenshot({ path: join(shots, name + '.png'), fullPage: full }));
   const settle = page => page.waitForTimeout(250);
+  /** Contrast of the text of each element a selector matches against that element's own background, lowest first. */
+  const textContrast = (page, sel) =>
+    page.evaluate(
+      sel =>
+        [...document.querySelectorAll(sel)]
+          .map(e => +window.__contrast(getComputedStyle(e).color, getComputedStyle(e).backgroundColor).toFixed(2))
+          .sort((a, b) => a - b),
+      sel,
+    );
+  /** Contrast of a colour token against the panel colour. 0 when the token is not defined. */
+  const tokenContrast = (page, name) =>
+    page.evaluate(name => {
+      const s = getComputedStyle(document.documentElement);
+      const v = s.getPropertyValue(name).trim();
+      return v ? +window.__contrast(v, s.getPropertyValue('--surface')).toFixed(2) : 0;
+    }, name);
 
   // geometry of the trace canvas, as in src/charts.ts: TG for the traces, SW for the switch rows under them
   const TG = { l: 46, r: 92, lab: 17, ph: 53, gap: 6 };
@@ -186,6 +221,19 @@ try {
 
   // findings: counts, explicit steps, and jumping to one shows its channels flagged
   check('finding summary', (await text(page, 'find-sum')) === '2 risk · 7 to check · 4 notes · 3 OK', await text(page, 'find-sum'));
+  // contrast: text is at least 4.5:1 on what it sits on, a line or a mark at least 3:1 on a panel
+  const onRuns = await textContrast(page, '.ab button[aria-pressed="true"]');
+  check('A, B and C read on their buttons', onRuns.length === 3 && onRuns[0] >= 4.5, JSON.stringify(onRuns));
+  const onBadges = await textContrast(page, '.finding .ico');
+  check('every badge reads', onBadges.length === 16 && onBadges[0] >= 4.5, JSON.stringify(onBadges));
+  const tagGrey = await page.evaluate(() => {
+    const t = document.querySelector('.finding .tag');
+    return +window.__contrast(getComputedStyle(t).color, getComputedStyle(t.closest('.panel')).backgroundColor).toFixed(2);
+  });
+  check('the tag grey reads on a panel', tagGrey >= 4.5, String(tagGrey));
+  const marks = [];
+  for (const t of ['--run-a', '--run-b', '--run-c', '--warn-mark', '--crit']) marks.push(await tokenContrast(page, t));
+  check('run colours and markers show on a panel', Math.min(...marks) >= 3, JSON.stringify(marks));
   const lc = page.locator('.finding', { hasText: 'Launch control switches on at every stop' });
   check('launch control finding has steps', (await lc.locator('ol.steps li').count()) >= 2);
   await lc.locator('.acts button').first().click();
@@ -218,6 +266,18 @@ try {
       /^[+−]?\d+$/.test((await page.locator('#t3-grid td:not(:empty)').first().textContent()) || ''),
   );
   await shot(page, '05-fuel-table');
+  // every number in a grid table reads on its cell; then back to the fuel grid, as the checks below expect
+  const fuelCells = await textContrast(page, '#t3-grid td:not(:empty)');
+  await page.click('[data-tmode="ign"]');
+  await page.click('[data-tview="grid"]');
+  const ignCells = await textContrast(page, '#t3-grid td:not(:empty)');
+  check(
+    'every number in the grid tables reads on its cell',
+    fuelCells.length > 10 && fuelCells[0] >= 4.5 && ignCells.length > 40 && ignCells[0] >= 4.5,
+    JSON.stringify([fuelCells[0], fuelCells.length, ignCells[0], ignCells.length]),
+  );
+  await page.click('[data-tview="3d"]');
+  await page.click('[data-tmode="fuel"]');
 
   // channel picker, custom view, rename: all saved
   check(
@@ -625,6 +685,31 @@ try {
       m.sw <= m.cw && m.rail === (width < 860 ? 'static' : 'sticky') && m.rows === 6,
       JSON.stringify(m),
     );
+    const darkA = await textContrast(page, '.ab button.r0[aria-pressed="true"]');
+    const darkNote = await textContrast(page, '.finding.info .ico');
+    check(
+      name + ' in the dark theme: A and the Note badge read',
+      darkA.length === 1 && darkA[0] >= 4.5 && darkNote.length === 4 && darkNote[0] >= 4.5,
+      JSON.stringify([darkA, darkNote]),
+    );
+    if (name === 'phone') {
+      // the dark theme can also be chosen by attribute: that block must carry the same tokens as the system one
+      const names = ['--ink-3', '--note', '--run-a', '--run-c', '--on-run-a', '--on-note', '--warn-mark'];
+      const read = () =>
+        page.evaluate(ns => {
+          const s = getComputedStyle(document.documentElement);
+          return ns.map(n => s.getPropertyValue(n).trim()).join();
+        }, names);
+      const bySystem = await read();
+      await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
+      const byAttribute = await read();
+      await page.evaluate(() => delete document.documentElement.dataset.theme);
+      check(
+        'both dark theme blocks carry the same tokens',
+        bySystem === byAttribute && bySystem === '#8b8e96,#8b8e96,#3987e5,#199e70,#060606,#060606,#fab219',
+        bySystem + ' | ' + byAttribute,
+      );
+    }
     await shot(page, '07-' + name, true);
     await page.close();
   }

@@ -44,6 +44,7 @@ import {
   focusPull,
   focusSpan,
   hideTip,
+  inkOn,
   logDefault,
   logName,
   pullDefault,
@@ -894,9 +895,8 @@ function buildGrid(): void {
       const td = el('td');
       if (v === v) {
         const c = sc.color(v);
-        const lum = (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255;
         td.style.background = css(c);
-        td.style.color = lum > 0.6 ? '#10151c' : '#ffffff';
+        td.style.color = inkOn(c);
         td.textContent = sc.fuel ? (v >= 0.5 ? '+' : v <= -0.5 ? '−' : '') + Math.abs(Math.round(v)) : String(Math.round(v));
         td.title =
           fmt(T.rpmAx[r]) +

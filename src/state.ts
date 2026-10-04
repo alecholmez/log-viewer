@@ -376,6 +376,9 @@ export interface Theme {
   ink: string;
   ink2: string;
   ink3: string;
+  /** the two inks for text on a colour: light and dark */
+  inkLight: string;
+  inkDark: string;
   grid: string;
   rule: string;
   run: string[];
@@ -384,6 +387,7 @@ export interface Theme {
   divNeg: string;
   divMid: string;
   divPos: string;
+  /** amber as a line or a mark on a panel */
   warn: string;
   crit: string;
   note: string;
@@ -403,6 +407,8 @@ export function theme(): Theme {
     ink: g('--ink'),
     ink2: g('--ink-2'),
     ink3: g('--ink-3'),
+    inkLight: g('--on-fill-light'),
+    inkDark: g('--on-fill-dark'),
     grid: g('--grid'),
     rule: g('--rule'),
     run: [g('--run-a'), g('--run-b'), g('--run-c')],
@@ -411,7 +417,7 @@ export function theme(): Theme {
     divNeg: g('--div-neg'),
     divMid: g('--div-mid'),
     divPos: g('--div-pos'),
-    warn: g('--warn'),
+    warn: g('--warn-mark'),
     crit: g('--crit'),
     note: g('--note'),
     body: g('--font-body'),
@@ -439,6 +445,22 @@ export const mix = (a: string, b: string, f: number): RGB => {
   return [0, 1, 2].map(i => Math.round(x[i] + (y[i] - x[i]) * f));
 };
 export const css = (c: RGB, k = 1) => 'rgb(' + c.map(v => Math.round(v * k)).join(',') + ')';
+/** Relative luminance of a colour, as WCAG defines it. */
+const luminance = (c: RGB) => {
+  const [r, g, b] = c.map(v => (v / 255 <= 0.03928 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+/** WCAG contrast ratio of two colours, from 1 to 21. */
+export const contrast = (a: RGB, b: RGB) => {
+  const x = luminance(a) + 0.05;
+  const y = luminance(b) + 0.05;
+  return x > y ? x / y : y / x;
+};
+/** The colour for text on a filled cell: whichever of the two fill inks contrasts more with the fill. */
+export function inkOn(fill: RGB): string {
+  const th = theme();
+  return contrast(rgb(th.inkLight), fill) >= contrast(rgb(th.inkDark), fill) ? th.inkLight : th.inkDark;
+}
 
 /** Size a canvas to its box at the device's pixel density and clear it. */
 export function prep(cv: HTMLCanvasElement) {

@@ -14,12 +14,15 @@ colors:
   on-primary: "#fdfdfe"
   selected: "#e8e9ed"
   body: "#5b5e66"
-  muted: "#74777f"
+  muted: "#686b73"
   redline: "#c81e33"
-  run-a: "#2a78d6"
+  run-a: "#2875d2"
   run-b: "#eb6834"
-  run-c: "#1baf7a"
+  run-c: "#159c6c"
   check: "#fab219"
+  check-mark: "#b87f00"
+  on-fill-light: "#ffffff"
+  on-fill-dark: "#060606"
   ok: "#0ca30c"
 
 typography:
@@ -75,16 +78,21 @@ Light is the default theme, on the site and in the app. The dark theme keeps eve
 | `selected` | #e8e9ed | #2e3036 | A selected control: a pale chip, never a solid dark fill. |
 | `on-primary` | #fdfdfe | #1d1f23 | Text on the filled button. |
 | `body` | #5b5e66 | #a8abb2 | Running text. |
-| `muted` | #74777f | #83868e | Captions and entries that are not active. |
+| `muted` | #686b73 | #8b8e96 | Captions and entries that are not active. |
 | `redline` | #c81e33 | #e0263c | The only brand colour. |
-| `run-a` | #2a78d6 | #3987e5 | Data only: the first overlaid pull. |
+| `run-a` | #2875d2 | #3987e5 | Data only: the first overlaid pull. |
 | `run-b` | #eb6834 | #d95926 | Data only: the second. |
-| `run-c` | #1baf7a | #199e70 | Data only: the third. |
+| `run-c` | #159c6c | #199e70 | Data only: the third. |
 | `check` | #fab219 | #fab219 | Finding severity: to check. |
+| `check-mark` | #b87f00 | #fab219 | `check` as a line or a mark on a panel, where the badge's amber is too pale in the light theme. |
+| `on-fill-light` | #ffffff | #ffffff | Text on a run colour or a severity badge, when the fill is dark. |
+| `on-fill-dark` | #060606 | #060606 | The same, when the fill is light. |
 | `ok` | #0ca30c | #0ca30c | Finding severity: OK. |
 
 `redline` appears as the short red bar that ends a rule, as the redline ends a tachometer, and as the risk colour in findings. It is never a button, a fill or a text colour.
 The run colours are for data only. A finding is `redline` for risk, `check`, `ok`, or `muted` for a note.
+
+Text is at least 4.5:1 against what it sits on, and a line or a mark on a chart at least 3:1. Text on a colour is `on-fill-light` or `on-fill-dark`, whichever reaches 4.5:1: in the light theme A is light and B and C are dark, in the dark theme all three are dark. A number on a table cell takes whichever of the two contrasts more with the cell.
 
 ## 3. Typography
 

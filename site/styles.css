@@ -14,7 +14,7 @@
   --surface-shot:#fdfdfe;
   --hairline:#e4e4e8; --hairline-strong:#d0d0d6;
   /* body is a step darker than the app's secondary text: it is set in a light weight */
-  --ink:#1d1f23; --body:#4b4e56; --muted:#74777f;
+  --ink:#1d1f23; --body:#4b4e56; --muted:#686b73;
   /* the only colour. It marks the end of a rule, as the redline marks the end of a tachometer. Never a fill, never a button. */
   --redline:#c81e33;
   --display:"Lato","Helvetica Neue",Arial,system-ui,sans-serif;
