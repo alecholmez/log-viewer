@@ -317,6 +317,62 @@ try {
   await page.fill('#view-name', 'Warm-up');
   await page.click('#view-save');
   check('view saved', (await text(page, 'view-msg')) === 'Saved “Warm-up”.');
+  // saving over another view asks first; a name every object has, such as "constructor", is not taken for a saved view
+  const viewState = () =>
+    page.evaluate(() => {
+      const s = window.__logViewer;
+      return {
+        views: Object.keys(s.views).sort().join(),
+        view: s.viewName,
+        traces: s.rview.traces.map(t => t.a),
+        msg: document.getElementById('view-msg').textContent,
+        btn: document.getElementById('view-save').textContent,
+        status: document.getElementById('status').textContent,
+        act: document.getElementById('msg-act').hidden ? null : document.getElementById('msg-act').textContent,
+      };
+    });
+  await page.fill('#view-name', 'constructor');
+  await page.click('#view-save');
+  const plain = await viewState();
+  check(
+    'a name every object has saves without asking',
+    plain.msg === 'Saved “constructor”.' && plain.view === 'constructor',
+    JSON.stringify(plain),
+  );
+  await page.fill('#view-name', 'Warm-up');
+  await page.click('#view-save');
+  const replaceAsk = await viewState();
+  check(
+    'saving over another view asks first',
+    replaceAsk.msg === 'A view called “Warm-up” exists. Replace it?' && replaceAsk.btn === 'Replace' && replaceAsk.view === 'constructor',
+    JSON.stringify(replaceAsk),
+  );
+  await page.click('#view-save');
+  const replaced = await viewState();
+  check(
+    'the second click replaces it',
+    replaced.msg === 'Saved “Warm-up”.' && replaced.btn === 'Save view' && replaced.view === 'Warm-up',
+    JSON.stringify(replaced),
+  );
+  // deleting a view can be undone
+  await page.selectOption('#view-sel', 'constructor');
+  await page.click('#view-del');
+  const gone = await viewState();
+  check(
+    'deleting a view says so and offers Undo',
+    gone.views === 'Warm-up' && gone.status === 'Deleted “constructor”.' && gone.act === 'Undo',
+    JSON.stringify(gone),
+  );
+  if (gone.act === 'Undo') await page.click('#msg-act');
+  const undone = await viewState();
+  check(
+    'Undo puts the view back and loads it',
+    undone.views === 'Warm-up,constructor' && undone.view === 'constructor' && undone.traces.includes('Coolant Temperature'),
+    JSON.stringify(undone),
+  );
+  // leave the library as the checks below expect it: Warm-up loaded, no other view
+  if ((await page.inputValue('#view-sel')) === 'constructor') await page.click('#view-del');
+  await page.selectOption('#view-sel', 'Warm-up');
   await page.locator('.log-head', { hasText: '1:45 pm log' }).locator('button', { hasText: 'Rename' }).click();
   await page.keyboard.type('Back road');
   await page.keyboard.press('Enter');

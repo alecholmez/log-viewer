@@ -793,6 +793,18 @@ function updatePicker(now: number): void {
 
 const FINDING_OPTION = '\u0000finding';
 
+/** The name Save view is asking about before it replaces that view, and the clock that withdraws the question. */
+let replaceAsked = '';
+let replaceTimer = 0;
+
+/** Put Save view back as it was, if it is asking before replacing a view. */
+function disarmReplace(): void {
+  if (!replaceAsked) return;
+  replaceAsked = '';
+  clearTimeout(replaceTimer);
+  $('view-save').textContent = 'Save view';
+}
+
 function viewChanged(): void {
   S.rev++;
   $('view-msg').textContent = 'Unsaved changes';
@@ -825,6 +837,7 @@ function renderViewSel(): void {
 
 function loadView(nm: string): void {
   if (nm === FINDING_OPTION) return;
+  disarmReplace();
   S.fview = null;
   S.viewName = nm;
   S.rview = copyView(nm === 'Default' ? DEFAULT_VIEW : S.views[nm]);
@@ -1247,6 +1260,20 @@ function wire(): void {
       input('view-name').focus();
       return;
     }
+    // saving over another view asks first; saving the view that is loaded is how its changes are kept.
+    // Object.keys, not `in`: "constructor" is on every object and is not a saved view
+    if (Object.keys(S.views).includes(nm) && nm !== S.viewName && replaceAsked !== nm) {
+      disarmReplace();
+      replaceAsked = nm;
+      $('view-save').textContent = 'Replace';
+      $('view-msg').textContent = 'A view called “' + nm + '” exists. Replace it?';
+      replaceTimer = window.setTimeout(() => {
+        disarmReplace();
+        $('view-msg').textContent = '';
+      }, 5000);
+      return;
+    }
+    disarmReplace();
     adoptFinding();
     S.views[nm] = copyView(S.rview);
     S.viewName = nm;
@@ -1258,12 +1285,26 @@ function wire(): void {
     saveSettings();
     $('view-msg').textContent = 'Saved “' + nm + '”.';
   });
+  input('view-name').addEventListener('input', () => {
+    if (!replaceAsked) return;
+    disarmReplace();
+    $('view-msg').textContent = '';
+  });
   $('view-del').addEventListener('click', () => {
     const nm = $<HTMLSelectElement>('view-sel').value;
     if (nm === 'Default' || nm === FINDING_OPTION) return;
+    const kept = S.views[nm];
     delete S.views[nm];
     loadView('Default');
-    $('view-msg').textContent = 'Deleted “' + nm + '”.';
+    say('Deleted “' + nm + '”.', {
+      label: 'Undo',
+      run: () => {
+        // a view saved under the name since then is not replaced
+        if (Object.keys(S.views).includes(nm)) return;
+        S.views[nm] = kept;
+        loadView(nm);
+      },
+    });
   });
 
   // power chart
