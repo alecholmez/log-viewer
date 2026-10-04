@@ -24,8 +24,21 @@ fn names(reply: &Value) -> Vec<&str> {
     rows.iter().map(|r| r["name"].as_str().unwrap()).collect()
 }
 
-/// The pull the app opens on: the one with the largest RPM gain. Returns its log and the span the replay shows,
-/// which is the pull with 1.5 s either side.
+/// Seconds shown either side of a pull. Copies the UI's rule for the span of a pull (`focusPull` in `src/state.ts`).
+const PULL_PAD: f64 = 1.5;
+
+/// A pull's log and the span the replay shows for it: the pull with `PULL_PAD` either side, kept inside the log,
+/// as the UI does.
+fn replay_span(s: &mut Session, pull: &Value) -> (String, f64, f64) {
+    let log = pull["logKey"].as_str().unwrap().to_string();
+    let logs = call(s, "logs", json!({})).unwrap();
+    let meta = logs.as_array().unwrap().iter().find(|l| l["key"] == log);
+    let duration = meta.unwrap()["duration"].as_f64().unwrap();
+    let (t0, t1) = (pull["t0"].as_f64().unwrap(), pull["t1"].as_f64().unwrap());
+    (log, (t0 - PULL_PAD).max(0.0), (t1 + PULL_PAD).min(duration))
+}
+
+/// The pull the app opens on: the one with the largest RPM gain.
 fn default_pull(s: &mut Session) -> (String, f64, f64) {
     let overview = call(s, "overview", json!({})).unwrap();
     let pulls = overview["pulls"].as_array().unwrap();
@@ -33,12 +46,21 @@ fn default_pull(s: &mut Session) -> (String, f64, f64) {
     let p = pulls
         .iter()
         .max_by(|a, b| gain(a).total_cmp(&gain(b)))
-        .unwrap();
-    (
-        p["logKey"].as_str().unwrap().to_string(),
-        p["t0"].as_f64().unwrap() - 1.5,
-        p["t1"].as_f64().unwrap() + 1.5,
-    )
+        .unwrap()
+        .clone();
+    replay_span(s, &p)
+}
+
+/// The pull with the given key.
+fn pull(s: &mut Session, key: &str) -> (String, f64, f64) {
+    let overview = call(s, "overview", json!({})).unwrap();
+    let pulls = overview["pulls"].as_array().unwrap();
+    let p = pulls
+        .iter()
+        .find(|p| p["key"] == key)
+        .expect("sample pull")
+        .clone();
+    replay_span(s, &p)
 }
 
 #[test]
@@ -48,7 +70,7 @@ fn the_default_pull_gets_its_rows_in_order_of_first_change() {
     };
     let (log, t0, t1) = default_pull(&mut s);
     assert_eq!(log, log_key(&mut s, "PCLog_2026-04-17_0145pm.csv"));
-    assert_eq!((t0, t1), (31.251 - 1.5, 34.91 + 1.5));
+    assert_eq!((t0, t1), (31.251 - PULL_PAD, 34.91 + PULL_PAD));
 
     let reply = rows(&mut s, &log, t0, t1);
     assert_eq!(
@@ -122,6 +144,37 @@ fn a_whole_log_is_cut_at_eight_rows_and_says_how_many_are_left_out() {
     for row in reply["rows"].as_array().unwrap() {
         assert_eq!(row["also"], json!([]), "{}", row["name"]);
     }
+}
+
+/// O2 Control State reads only 0 and 1 in the 1:46 pm log, as Decel Detected does, but declares `524288,0`.
+/// Diagnostic ratiometric voltage reference error reads 0 and 1 there too and declares `4096,-4096`. Neither is a switch.
+#[test]
+fn the_1_46_pm_3rd_gear_pull_has_no_state_channel_in_its_rows() {
+    let Some(mut s) = sample_session() else {
+        return;
+    };
+    let (log, t0, t1) = pull(&mut s, "PCLog_2026-04-17_0146pm.csv|20260417 01:46:49@0.7");
+    assert_eq!((t0, t1), (0.0, 2.771 + PULL_PAD));
+    let reply = rows(&mut s, &log, t0, t1);
+    assert_eq!(reply["rows"][0]["name"], "Decel Detected");
+    assert_eq!(reply["rows"][0]["also"], json!([]));
+    let text = reply.to_string();
+    assert!(
+        !text.contains("O2 Control State") && !text.contains("Diagnostic"),
+        "{text}"
+    );
+}
+
+/// Drive By Wire Throttle Motor Direction declares `2,0` and reads 0, 1 and 2 in most sample logs. In the 1:36 pm log
+/// it reads only 0 and 1, so it is a switch there. A known limit of the rule: the header cannot tell it from a switch.
+#[test]
+fn a_state_that_declares_0_to_2_and_reads_0_and_1_is_still_a_switch() {
+    let Some(mut s) = sample_session() else {
+        return;
+    };
+    let log = log_key(&mut s, "PCLog_2026-04-17_0136pm.csv");
+    let reply = rows(&mut s, &log, 0.0, 69.743);
+    assert_eq!(names(&reply), ["Drive By Wire Throttle Motor Direction"]);
 }
 
 #[test]

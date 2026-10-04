@@ -45,6 +45,8 @@ pub struct Log {
     pub hz: f64,
     pub names: Vec<String>,
     pub types: Vec<String>,
+    /// per channel, the range the log's header declares, as [min, max] in engineering units; None when it declares none
+    pub ranges: Vec<Option<[f64; 2]>>,
     pub cols: Vec<Col>,
     pub ch: Ch,
     index: HashMap<String, usize>,
@@ -121,6 +123,12 @@ impl Log {
             cam: get(name::CAM),
             cam_t: get(name::CAM_TARGET),
         };
+        let ranges = (raw.ranges.iter().zip(&raw.types))
+            .map(|(range, ty)| {
+                let (s, o, _, _) = type_info(ty);
+                range.map(|[min, max]| [min * s + o, max * s + o])
+            })
+            .collect();
         Ok(Log {
             key: format!("{}|{}", raw.name, raw.start),
             name: raw.name,
@@ -132,6 +140,7 @@ impl Log {
             nan: vec![f64::NAN; n],
             names: raw.names,
             types: raw.types,
+            ranges,
             cols: raw.cols,
             ch,
             index,
@@ -173,5 +182,33 @@ impl Log {
         } else {
             self.t[self.n - 1] - self.t[0]
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Log;
+    use crate::haltech::parse_nsp_csv;
+
+    #[test]
+    fn a_declared_range_is_scaled_like_the_samples() {
+        let text = "%DataLog%\n\
+            Channel : RPM\nType : EngineSpeed\nDisplayMaxMin : 20000,0\n\
+            Channel : Vehicle Speed\nType : Speed\nDisplayMaxMin : 4000,0\n\
+            Channel : Brake Pedal State\nType : Raw\nDisplayMaxMin : 2,0\n\
+            Channel : Fuel Composition\nType : Percentage\nDisplayMaxMin : 1000,0\n\
+            Channel : Memory Writes Pending\nType : Raw\n\
+            12:00:00.000,3000,0,0,500,0\n";
+        let log = Log::from_raw(parse_nsp_csv(text, "t.csv").unwrap()).unwrap();
+        assert_eq!(
+            log.ranges,
+            [
+                Some([0.0, 20000.0]),
+                Some([0.0, 400.0]),
+                Some([0.0, 2.0]),
+                Some([0.0, 100.0]),
+                None
+            ]
+        );
     }
 }

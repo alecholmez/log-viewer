@@ -100,6 +100,8 @@ pub struct RawLog {
     pub start: String,
     pub names: Vec<String>,
     pub types: Vec<String>,
+    /// per channel, the header's `DisplayMaxMin` as [min, max] in raw units; None when the header gives none
+    pub ranges: Vec<Option<[f64; 2]>>,
     /// milliseconds from the first row
     pub t_ms: Vec<f64>,
     pub cols: Vec<Col>,
@@ -140,6 +142,12 @@ fn cell(s: Option<&str>) -> f64 {
     }
 }
 
+/// `DisplayMaxMin : max,min` as [min, max]. None when it is not two numbers.
+fn display_range(val: &str) -> Option<[f64; 2]> {
+    let (max, min) = val.split_once(',')?;
+    Some([min.trim().parse().ok()?, max.trim().parse().ok()?])
+}
+
 /// Parse a Haltech NSP "PCLog" CSV export, keeping every channel.
 pub fn parse_nsp_csv(text: &str, name: &str) -> Result<RawLog, String> {
     if !text.starts_with("%DataLog%") {
@@ -147,6 +155,7 @@ pub fn parse_nsp_csv(text: &str, name: &str) -> Result<RawLog, String> {
     }
     let mut names: Vec<String> = Vec::new();
     let mut types: Vec<String> = Vec::new();
+    let mut ranges: Vec<Option<[f64; 2]>> = Vec::new();
     let mut start = String::new();
     let mut lines = text.split('\n').map(|l| l.strip_suffix('\r').unwrap_or(l));
     let mut first_row: Option<&str> = None;
@@ -161,10 +170,16 @@ pub fn parse_nsp_csv(text: &str, name: &str) -> Result<RawLog, String> {
             "Channel" => {
                 names.push(val.to_string());
                 types.push("Raw".to_string());
+                ranges.push(None);
             }
             "Type" => {
                 if let Some(last) = types.last_mut() {
                     *last = val.to_string();
+                }
+            }
+            "DisplayMaxMin" => {
+                if let Some(last) = ranges.last_mut() {
+                    *last = display_range(val);
                 }
             }
             "Log" => start = val.to_string(),
@@ -212,7 +227,29 @@ pub fn parse_nsp_csv(text: &str, name: &str) -> Result<RawLog, String> {
         start,
         names,
         types,
+        ranges,
         t_ms,
         cols,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_declared_range_is_kept_with_its_channel() {
+        let text = "%DataLog%\n\
+            Channel : RPM\nID : 1\nType : EngineSpeed\nDisplayMaxMin : 20000,0\n\
+            Channel : No range\nID : 2\nType : Raw\n\
+            Channel : Error\nID : 3\nType : Raw\nDisplayMaxMin : 4096,-4096\n\
+            Channel : Not numbers\nID : 4\nType : Raw\nDisplayMaxMin : high,low\n\
+            12:00:00.000,3000,0,1,0\n";
+        let raw = parse_nsp_csv(text, "t.csv").unwrap();
+        // NSP writes the maximum first; the range is kept as [min, max]
+        assert_eq!(
+            raw.ranges,
+            [Some([0.0, 20000.0]), None, Some([-4096.0, 4096.0]), None]
+        );
+    }
 }

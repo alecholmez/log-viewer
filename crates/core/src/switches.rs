@@ -52,8 +52,19 @@ pub struct Rows {
     pub more: usize,
 }
 
+/// A switch: the range the log declares for it, if any, lies within 0 to 2, and its samples read 0 and 1.
+fn is_switch(a: &[f64], range: Option<[f64; 2]>) -> bool {
+    declares_on_off(range) && reads_on_off(a)
+}
+
+/// NSP declares `1,0` or `2,0` for a switch, and a wider range for a state or a count that can read only 0 and 1 in one log.
+/// A log that declares no range leaves it to the samples.
+fn declares_on_off(range: Option<[f64; 2]>) -> bool {
+    range.is_none_or(|[min, max]| min >= 0.0 && max <= 2.0)
+}
+
 /// 0 or 1 at every sample that is present, and both occur.
-fn is_switch(a: &[f64]) -> bool {
+fn reads_on_off(a: &[f64]) -> bool {
     let (mut off, mut on) = (false, false);
     for &v in a {
         if v == 0.0 {
@@ -113,7 +124,7 @@ fn trace(j: usize, t: &[f64], a: &[f64]) -> Switch {
 fn all(log: &Log) -> &[Switch] {
     log.switches.get_or_init(|| {
         (0..log.names.len())
-            .filter(|&j| !log.is_const(j) && is_switch(log.chan_at(j)))
+            .filter(|&j| !log.is_const(j) && is_switch(log.chan_at(j), log.ranges[j]))
             .map(|j| trace(j, &log.t, log.chan_at(j)))
             .collect()
     })
@@ -260,6 +271,7 @@ mod tests {
             name: "built.csv".into(),
             start: "built".into(),
             types: vec!["Raw".to_string(); names.len()],
+            ranges: vec![None; names.len()],
             names,
             t_ms,
             cols,
@@ -271,6 +283,20 @@ mod tests {
     fn log(channels: &[(&str, &[f64])]) -> Log {
         let n = channels[0].1.len();
         log_at((0..n).map(|i| i as f64 * 1000.0).collect(), channels)
+    }
+
+    /// A channel's name, the range the log's header declares for it in engineering units, and its samples.
+    type Declared<'a> = (&'a str, Option<[f64; 2]>, &'a [f64]);
+
+    /// The same as `log`, with a declared range for each channel.
+    fn declared(channels: &[Declared]) -> Log {
+        let plain: Vec<(&str, &[f64])> = channels.iter().map(|(n, _, v)| (*n, *v)).collect();
+        let mut l = log(&plain);
+        // RPM and Vehicle Speed come first
+        for (k, (_, range, _)) in channels.iter().enumerate() {
+            l.ranges[2 + k] = *range;
+        }
+        l
     }
 
     /// The rows for the whole of a log.
@@ -321,6 +347,36 @@ mod tests {
             ("Brake", &[0.0, 1.0, 1.0, 0.0, 0.0]),
         ]);
         assert_eq!(names(&whole(&l)), ["Brake"]);
+    }
+
+    /// A state or a count can read only 0 and 1 in one log and still declare a wider range in the header.
+    /// The switches in the sample logs declare `1,0` or `2,0`.
+    #[test]
+    fn a_channel_that_declares_a_range_wider_than_0_to_2_is_not_a_switch() {
+        // on for one sample, two samples after the channel before it
+        let on_at =
+            |i: usize| -> Vec<f64> { (0..13).map(|k| if k == i { 1.0 } else { 0.0 }).collect() };
+        let l = declared(&[
+            // as O2 Control State and Diagnostic ratiometric voltage reference error declare in the sample logs
+            ("O2 Control State", Some([0.0, 524_288.0]), &on_at(1)),
+            ("Reference error", Some([-4096.0, 4096.0]), &on_at(3)),
+            // as Clutch State and Brake Pedal State declare
+            ("Clutch State", Some([0.0, 1.0]), &on_at(5)),
+            ("Brake Pedal State", Some([0.0, 2.0]), &on_at(7)),
+            // declares 0 to 2 and reads 0 and 1 here: a switch in this log, as Drive By Wire Throttle Motor Direction is
+            ("Motor Direction", Some([0.0, 2.0]), &on_at(9)),
+            // no range declared: the samples alone decide
+            ("No range", None, &on_at(11)),
+        ]);
+        assert_eq!(
+            names(&whole(&l)),
+            [
+                "Clutch State",
+                "Brake Pedal State",
+                "Motor Direction",
+                "No range"
+            ]
+        );
     }
 
     #[test]
