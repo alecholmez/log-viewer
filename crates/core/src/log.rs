@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use crate::haltech::{name, type_info, Col, RawLog, BAD};
+use crate::switches::Switch;
 
 /// Key channels in engineering units. A channel the log does not have is all NaN.
 pub struct Ch {
@@ -50,6 +51,8 @@ pub struct Log {
     scaled: Vec<OnceLock<Vec<f64>>>,
     nan: Vec<f64>,
     pub(crate) states: OnceLock<Vec<String>>,
+    /// the on/off channels, found on first use
+    pub(crate) switches: OnceLock<Vec<Switch>>,
 }
 
 fn scale(col: &Col, ty: &str, n: usize) -> Vec<f64> {
@@ -133,6 +136,7 @@ impl Log {
             ch,
             index,
             states: OnceLock::new(),
+            switches: OnceLock::new(),
         })
     }
 

@@ -5,6 +5,7 @@
 //! - `dyno`: pull detection and the virtual dyno.
 //! - `table`: ignition and fuel-correction tables binned from the logs.
 //! - `findings`: what is wrong, why it matters, and what to change.
+//! - `switches`: on/off channels and when they change, for the replay's switch rows.
 //! - `session`: app state and the single `dispatch` entry point the shells call.
 
 // `!(x > 0.5)` is used on purpose throughout: it is also true when x is NaN (a missing sample), which `x <= 0.5` is not.
@@ -17,6 +18,7 @@ pub mod haltech;
 pub mod log;
 pub mod session;
 pub mod stats;
+pub mod switches;
 pub mod table;
 
 pub use session::{Reply, Session};
