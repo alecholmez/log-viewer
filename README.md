@@ -1,6 +1,6 @@
 # Log Viewer
 
-Reads ECU logs, estimates wheel power from them, and says what to change in the tune.
+A virtual dyno: it reads ECU logs, estimates wheel power from them, and says what to change in the tune.
 
 Supported today: Haltech NSP laptop logs (`PCLog_*.csv`). The format code is one module, so other ECUs (Link next) are added beside it.
 

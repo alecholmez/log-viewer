@@ -98,7 +98,15 @@ figcaption{color:var(--ink-2)}
 .chart.wide{grid-column:1 / -1;grid-row:auto;grid-template:auto / minmax(0,2fr) minmax(0,1fr);gap:40px;align-items:start;margin-top:64px}
 .chart.wide figcaption{margin-top:4px;padding-right:0}
 
-/* formats: what is read, and how logs get in */
+/* supported ECUs: one chart, a check on each one the app reads */
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.ecus{columns:5 170px;column-gap:28px;margin-top:40px;padding-top:20px;border-top:1px solid var(--rule);font-size:1rem}
+.ecus li{position:relative;padding:5px 0 5px 28px;color:var(--ink-2);break-inside:avoid}
+.ecus .yes{color:var(--ink);font-weight:700}
+.ecus svg{position:absolute;left:0;top:8px;width:19px;height:19px;color:var(--accent)}
+.ecus small{margin-left:6px;font-size:.8125rem;color:var(--ink-2);border:1px solid var(--rule);border-radius:var(--r-ui);padding:1px 6px}
+
+/* how logs get in */
 .formats{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:72px;align-items:start}
 .ways > div{display:grid;grid-template-columns:10rem minmax(0,1fr);gap:24px;padding-block:18px;border-top:1px solid var(--rule)}
 .ways > div:first-child{padding-top:6px;border-top:0}

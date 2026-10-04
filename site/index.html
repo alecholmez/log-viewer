@@ -4,15 +4,18 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
-    <title>Log Viewer: ECU log analysis with a virtual dyno</title>
+    <title>Log Viewer: a virtual dyno for ECU logs</title>
     <meta
       name="description"
-      content="Log Viewer reads Haltech NSP logs, estimates wheel power from each pull, and lists what to change in the tune. Open source, for macOS, Windows, iPhone and iPad."
+      content="Log Viewer is a virtual dyno for ECU logs. It estimates wheel power from each pull and lists what to change in the tune. Open source, for macOS, Windows, iPhone and iPad."
     />
     <link rel="canonical" href="https://alecholmez.github.io/log-viewer/" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Log Viewer" />
-    <meta property="og:description" content="Reads ECU logs, estimates wheel power from each pull, and lists what to change in the tune." />
+    <meta
+      property="og:description"
+      content="A virtual dyno for ECU logs. It estimates wheel power from each pull and lists what to change in the tune."
+    />
     <meta property="og:url" content="https://alecholmez.github.io/log-viewer/" />
     <meta property="og:image" content="https://alecholmez.github.io/log-viewer/og.png" />
     <meta property="og:image:width" content="1200" />
@@ -31,6 +34,9 @@
         <path
           d="M208.31,75.68A59.78,59.78,0,0,0,202.93,28,8,8,0,0,0,196,24a59.75,59.75,0,0,0-48,24H124A59.75,59.75,0,0,0,76,24a8,8,0,0,0-6.93,4,59.78,59.78,0,0,0-5.38,47.68A58.14,58.14,0,0,0,56,104v8a56.06,56.06,0,0,0,48.44,55.47A39.8,39.8,0,0,0,96,192v8H72a24,24,0,0,1-24-24A40,40,0,0,0,8,136a8,8,0,0,0,0,16,24,24,0,0,1,24,24,40,40,0,0,0,40,40H96v16a8,8,0,0,0,16,0V192a24,24,0,0,1,48,0v40a8,8,0,0,0,16,0V192a39.8,39.8,0,0,0-8.44-24.53A56.06,56.06,0,0,0,216,112v-8A58.14,58.14,0,0,0,208.31,75.68ZM200,112a40,40,0,0,1-40,40H112a40,40,0,0,1-40-40v-8a41.74,41.74,0,0,1,6.9-22.48A8,8,0,0,0,80,73.83a43.81,43.81,0,0,1,.79-33.58,43.88,43.88,0,0,1,32.32,20.06A8,8,0,0,0,119.82,64h32.35a8,8,0,0,0,6.74-3.69,43.87,43.87,0,0,1,32.32-20.06A43.81,43.81,0,0,1,192,73.83a8.09,8.09,0,0,0,1,7.65A41.72,41.72,0,0,1,200,104Z"
         />
+      </symbol>
+      <symbol id="i-check" viewBox="0 0 256 256">
+        <path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z" />
       </symbol>
       <symbol id="i-arrow" viewBox="0 0 256 256">
         <path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z" />
@@ -57,7 +63,7 @@
       <nav class="nav-links" aria-label="Sections">
         <a href="#findings">Findings</a>
         <a href="#charts">Charts</a>
-        <a href="#formats">Formats</a>
+        <a href="#supported">Supported ECUs</a>
       </nav>
       <a class="nav-icon" href="https://github.com/alecholmez/log-viewer" aria-label="View on GitHub">
         <svg aria-hidden="true"><use href="#i-github" /></svg>
@@ -70,9 +76,7 @@
         <div class="wrap hero-grid">
           <div class="hero-copy">
             <h1>Know what to change in the tune.</h1>
-            <p class="lede">
-              Log Viewer reads Haltech NSP logs, estimates wheel power from each pull, and lists the changes to make, with numbers.
-            </p>
+            <p class="lede">A virtual dyno for ECU logs. It estimates wheel power from each pull and lists what to change, with numbers.</p>
             <div class="cta">
               <a class="btn primary" href="#download">Download</a>
               <a class="btn" href="https://github.com/alecholmez/log-viewer">
@@ -148,10 +152,10 @@
                 />
               </picture>
               <figcaption>
-                <h3>Wheel power from a road pull</h3>
+                <h3>Virtual dyno</h3>
                 <p>
-                  Mass times acceleration, plus drag and rolling resistance. Overlay up to three pulls from the same road to compare
-                  changes.
+                  Wheel power from a road pull: mass times acceleration, plus drag and rolling resistance. Overlay up to three pulls to
+                  compare changes.
                 </p>
               </figcaption>
             </figure>
@@ -191,14 +195,90 @@
         </div>
       </section>
 
-      <section class="section" id="formats">
-        <div class="wrap formats">
+      <section class="section" id="supported">
+        <div class="wrap">
           <div class="section-head">
-            <h2>Haltech NSP logs today</h2>
-            <p>Laptop logs saved by NSP open as they are. Link ECU logs are next, and more will follow.</p>
+            <h2>Supported ECUs</h2>
+            <p>A check means Log Viewer reads that log today. The rest are planned, and each gets its check here when it lands.</p>
             <a class="link" href="https://github.com/alecholmez/log-viewer/issues/new">
               Request a format<svg aria-hidden="true"><use href="#i-arrow" /></svg>
             </a>
+          </div>
+          <!-- To mark one as supported: give its <li> class="yes" and the check icon, as on Haltech. -->
+          <ul class="ecus reveal">
+            <li>Access Tuner Race</li>
+            <li>Adaptronic</li>
+            <li>AEM / DSM Link</li>
+            <li>AlcaTek</li>
+            <li>Autronic</li>
+            <li>BootMod3</li>
+            <li>BtSsm</li>
+            <li>Cobb Access Port</li>
+            <li>Crome</li>
+            <li>DiabloSport</li>
+            <li>DiabloTrinity</li>
+            <li>DTA ECU</li>
+            <li>ECM Link</li>
+            <li>eCtune</li>
+            <li>ECU Explorer</li>
+            <li>ECU Master</li>
+            <li>EcuTek</li>
+            <li>EFI Live Enduring Solutions</li>
+            <li>Eurodyne Maestro</li>
+            <li>EvoLiveMap</li>
+            <li>EvoScan</li>
+            <li>FC-Datalogit</li>
+            <li>Forscan</li>
+            <li>GReddy EManage</li>
+            <li class="yes">
+              <svg aria-hidden="true"><use href="#i-check" /></svg>Haltech <span class="sr-only">(supported)</span>
+            </li>
+            <li>Halwin</li>
+            <li>Hand Held Halo</li>
+            <li>Holley EFI</li>
+            <li>Hondata</li>
+            <li>HPTuners</li>
+            <li>Hydra EMS</li>
+            <li>Innovate</li>
+            <li>Integrated Engineering</li>
+            <li>JuiceBox</li>
+            <li>Link G4 <small>next</small></li>
+            <li>LS2Edit</li>
+            <li>MaxxECU</li>
+            <li>MazdaEdit</li>
+            <li>MegaSquirt</li>
+            <li>ME221</li>
+            <li>MHD Flasher</li>
+            <li>MoTeC</li>
+            <li>Neptune</li>
+            <li>NismoTronic</li>
+            <li>Nissan Data Scan</li>
+            <li>Nistune</li>
+            <li>Procede</li>
+            <li>Pro Tuning Freaks</li>
+            <li>RomRaider</li>
+            <li>ScanXL</li>
+            <li>SCT</li>
+            <li>Syvecs ECU</li>
+            <li>Tactrix</li>
+            <li>Torque (Android)</li>
+            <li>TrackAddict HD</li>
+            <li>Tuner Pro</li>
+            <li>UpRev Cipher</li>
+            <li>UVScan</li>
+            <li>VAGCOM</li>
+            <li>VEMS</li>
+            <li>VersaTuner</li>
+            <li>ViPEC</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="section" id="logs">
+        <div class="wrap formats">
+          <div class="section-head">
+            <h2>Getting logs in</h2>
+            <p>Logs are copied into the app’s own library, so the original can be moved or deleted afterwards.</p>
           </div>
           <dl class="ways reveal">
             <div>
@@ -215,7 +295,7 @@
             </div>
             <div>
               <dt>On your device</dt>
-              <dd>Logs are copied into the app’s own library. Nothing is uploaded.</dd>
+              <dd>Everything is read on your device. Nothing is uploaded.</dd>
             </div>
           </dl>
         </div>
@@ -262,7 +342,7 @@
 
     <footer>
       <div class="wrap foot">
-        <p>Log Viewer is open source under the Apache 2.0 license. It is not affiliated with Haltech.</p>
+        <p>Log Viewer is open source under the Apache 2.0 license. It is not affiliated with any ECU maker.</p>
         <nav aria-label="Project">
           <a href="https://github.com/alecholmez/log-viewer">View on GitHub</a>
           <a href="https://github.com/alecholmez/log-viewer/issues">Issues</a>
