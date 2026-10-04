@@ -72,6 +72,7 @@ src                TypeScript. The UI: DOM and canvas, no framework.
 tests/ui.mjs       end-to-end test of the UI against the real core
 testdata/logs      eight real logs the tests run on
 site               the website: one static page, published to GitHub Pages
+DESIGN.md          the design system: colours, type and rules for the site and the app
 ```
 
 Every platform runs the same `Session::dispatch`. The UI asks for `logs`, `log_data`, `overview`, `dyno` and so on, and draws what comes back. Numbers are computed in Rust; the UI only formats them.
@@ -101,7 +102,7 @@ npm run dev                         # the UI on http://localhost:1420
 
 ```sh
 npm run build && cargo build --release -p logviewer-dev
-npm run site:shots                     # retake the screenshots from the real UI, light and dark
+npm run site:shots                     # retake the screenshots from the real UI
 python3 -m http.server 4173 -d site    # then open http://localhost:4173
 ```
 

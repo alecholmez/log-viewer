@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light dark" />
+    <meta name="color-scheme" content="dark" />
     <title>Log Viewer: a virtual dyno for ECU logs</title>
     <meta
       name="description"
@@ -23,8 +23,8 @@
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" href="icon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="icon-256.png" />
-    <link rel="preload" href="fonts/lato-latin-900-normal.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="fonts/lato-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="fonts/saira-condensed-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="fonts/lato-latin-300-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -85,16 +85,9 @@
             </div>
           </div>
           <picture class="hero-shot">
-            <source
-              media="(max-width: 899px) and (prefers-color-scheme: dark)"
-              srcset="img/finding-boost-dark.webp"
-              width="495"
-              height="362"
-            />
-            <source media="(max-width: 899px)" srcset="img/finding-boost-light.webp" width="495" height="362" />
-            <source media="(prefers-color-scheme: dark)" srcset="img/hero-dark.webp" width="1400" height="900" />
+            <source media="(max-width: 899px)" srcset="img/finding-boost.webp" width="495" height="362" />
             <img
-              src="img/hero-light.webp"
+              src="img/hero.webp"
               width="1400"
               height="900"
               alt="Log Viewer with a set of logs loaded, showing what it found in them"
@@ -106,22 +99,16 @@
 
       <section class="section" id="findings">
         <div class="wrap">
+          <div class="redline" aria-hidden="true"></div>
           <div class="section-head">
             <h2>Each finding says what to change</h2>
             <p>Evidence from your log, why it matters, and numbered steps with values worked out from your data. Risks are listed first.</p>
           </div>
           <figure class="findings-shot reveal">
             <picture>
-              <source
-                media="(max-width: 719px) and (prefers-color-scheme: dark)"
-                srcset="img/finding-fuel-dark.webp"
-                width="495"
-                height="441"
-              />
-              <source media="(max-width: 719px)" srcset="img/finding-fuel-light.webp" width="495" height="441" />
-              <source media="(prefers-color-scheme: dark)" srcset="img/findings-dark.webp" width="1034" height="700" />
+              <source media="(max-width: 719px)" srcset="img/finding-fuel.webp" width="495" height="441" />
               <img
-                src="img/findings-light.webp"
+                src="img/findings.webp"
                 width="1034"
                 height="700"
                 alt="Findings in Log Viewer, each with the readings it is based on, why it matters and numbered changes"
@@ -142,9 +129,8 @@
           <div class="charts">
             <figure class="chart reveal">
               <picture>
-                <source media="(prefers-color-scheme: dark)" srcset="img/power-dark.webp" />
                 <img
-                  src="img/power-light.webp"
+                  src="img/power.webp"
                   width="556"
                   height="638"
                   alt="Estimated wheel power and torque against engine speed for three pulls"
@@ -161,9 +147,8 @@
             </figure>
             <figure class="chart reveal">
               <picture>
-                <source media="(prefers-color-scheme: dark)" srcset="img/table-dark.webp" />
                 <img
-                  src="img/table-light.webp"
+                  src="img/table.webp"
                   width="464"
                   height="638"
                   alt="Ignition table drawn in 3D, with the path of one pull across it"
@@ -177,9 +162,8 @@
             </figure>
             <figure class="chart wide reveal">
               <picture class="frame">
-                <source media="(prefers-color-scheme: dark)" srcset="img/replay-dark.webp" />
                 <img
-                  src="img/replay-light.webp"
+                  src="img/replay.webp"
                   width="1004"
                   height="612"
                   alt="Replay of a pull: readouts at the playhead above traces of engine speed, pedal, manifold pressure, lambda, ignition and knock"

@@ -2,7 +2,8 @@
 //
 //   npm run build && cargo build --release -p logviewer-dev && npm run site:shots
 //
-// Writes site/img/<name>-<light|dark>.webp at twice the size the page shows them, and site/og.png, the link preview.
+// Writes site/img/<name>.webp at twice the size the page shows them, and site/og.png, the link preview.
+// The website is dark for every visitor, so the app is photographed in its dark theme.
 // Prints each image's size in CSS pixels; the width and height attributes in site/index.html must match.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -32,8 +33,8 @@ const toWebp = async (page, png) => {
 let browser;
 try {
   browser = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
-  for (const scheme of ['light', 'dark']) {
-    const page = await browser.newPage({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: 2, colorScheme: scheme });
+  {
+    const page = await browser.newPage({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: 2, colorScheme: 'dark' });
     await page.goto(url);
     await libraryOpen(page);
     if ((await page.locator('#logs .log').count()) === 0) {
@@ -61,7 +62,7 @@ try {
 
     const save = async (name, clip) => {
       const png = await page.screenshot(clip ? { clip } : {});
-      const file = name + '-' + scheme + '.webp';
+      const file = name + '.webp';
       const webp = await toWebp(page, png);
       writeFileSync(join(out, file), webp);
       const size = clip ?? page.viewportSize();
@@ -89,7 +90,7 @@ try {
   }
 
   // the link preview is the top of the website itself, served from disk under a made-up origin: a page opened as a file gets no fonts
-  const page = await browser.newPage({ viewport: { width: 1200, height: 630 }, colorScheme: 'light', reducedMotion: 'reduce' });
+  const page = await browser.newPage({ viewport: { width: 1200, height: 630 }, reducedMotion: 'reduce' });
   await page.route('http://site.test/**', route => route.fulfill({ path: join(site, new URL(route.request().url()).pathname) }));
   await page.goto('http://site.test/index.html');
   await page.evaluate(() => document.fonts.ready);
