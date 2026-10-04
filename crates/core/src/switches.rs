@@ -2,7 +2,7 @@
 //!
 //! NSP exports a switch as a plain number with no type that marks it, so a switch is found from its samples:
 //! every sample that is present is exactly 0 or 1, and both occur. Which channels are switches is worked out
-//! once per log and kept with it. Which of them change, and which read the same, is answered for a span.
+//! once per log and kept with it. Which of them change, and which read the same and change together, is answered for a span.
 
 use std::ops::Range;
 
@@ -33,9 +33,9 @@ pub struct Switch {
 /// One row of the replay: a switch that changes inside the span.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Row {
-    /// the shortest name among the channels that read the same across the span
+    /// the shortest name among the channels that read the same and change together across the span
     pub name: String,
-    /// the other channels that read the same across the span, shortest name first
+    /// the other channels that read the same and change together across the span, shortest name first
     pub also: Vec<String>,
     /// [start, end] in log seconds while the switch is on, clipped to the span
     pub on: Vec<[f64; 2]>,
@@ -162,32 +162,37 @@ impl Span {
     }
 }
 
-/// A switch that changes inside the span, with every channel that reads the same there.
+/// A switch that changes inside the span, with every channel that reads the same and changes at the same
+/// samples there. All of them agree on `changes`, `on` and `gaps`, so it does not matter which one is kept.
 struct Found<'a> {
-    /// sample index of its first change inside the span
-    first: usize,
+    /// sample indexes of its changes inside the span, never empty
+    changes: Vec<usize>,
     switch: &'a Switch,
-    /// the channels that read the same at every sample of the span, shortest name first
+    /// the channels that share this row, shortest name first
     names: Vec<&'a str>,
 }
 
-/// The switches that change at the samples `inside`, in order of first change. Channels that read the same
-/// at every one of those samples are one entry.
+/// The switches that change at the samples `inside`, in order of first change. Channels that read the same and
+/// change at the same samples there are one entry. A change on the first sample of the span counts.
 fn changing<'a>(log: &'a Log, inside: &Range<usize>) -> Vec<Found<'a>> {
     let readings = |s: &Switch| &log.chan_at(s.j)[inside.clone()];
     let mut found: Vec<Found> = Vec::new();
     for switch in all(log) {
-        let Some(&first) = switch.changes.iter().find(|i| inside.contains(i)) else {
+        let changes: Vec<usize> = (switch.changes.iter())
+            .copied()
+            .filter(|i| inside.contains(i))
+            .collect();
+        if changes.is_empty() {
             continue;
-        };
+        }
         let name = log.names[switch.j].as_str();
         match found
             .iter_mut()
-            .find(|f| same(readings(f.switch), readings(switch)))
+            .find(|f| f.changes == changes && same(readings(f.switch), readings(switch)))
         {
             Some(f) => f.names.push(name),
             None => found.push(Found {
-                first,
+                changes,
                 switch,
                 names: vec![name],
             }),
@@ -197,12 +202,12 @@ fn changing<'a>(log: &'a Log, inside: &Range<usize>) -> Vec<Found<'a>> {
         f.names.sort_by_key(|n| (n.chars().count(), *n));
     }
     // switches that first change at the same sample are in name order, so the order never depends on channel order
-    found.sort_by(|a, b| a.first.cmp(&b.first).then(a.names[0].cmp(b.names[0])));
+    found.sort_by(|a, b| (a.changes[0].cmp(&b.changes[0])).then(a.names[0].cmp(b.names[0])));
     found
 }
 
 /// The switches that change between `t0` and `t1` (log seconds, both ends included), in order of first change,
-/// at most `limit` of them. Channels that read the same at every sample of the span share one row.
+/// at most `limit` of them. Channels that read the same and change at the same samples of the span share one row.
 pub fn switches(log: &Log, t0: f64, t1: f64, limit: usize) -> Rows {
     // also true when either end is NaN
     if !(t0 <= t1) {
@@ -223,10 +228,7 @@ pub fn switches(log: &Log, t0: f64, t1: f64, limit: usize) -> Rows {
             also: f.names[1..].iter().map(|n| n.to_string()).collect(),
             on: span.clip(&f.switch.on),
             gaps: span.clip(&f.switch.gaps),
-            changes: (f.switch.changes.iter())
-                .filter(|i| inside.contains(i))
-                .map(|&i| span.snap(log.t[i]))
-                .collect(),
+            changes: f.changes.iter().map(|&i| span.snap(log.t[i])).collect(),
         })
         .collect();
     Rows { rows, more }
@@ -549,5 +551,31 @@ mod tests {
         assert_eq!(switches(&l, 3.0, 0.0, MAX_ROWS), none);
         assert_eq!(switches(&l, f64::NAN, 3.0, MAX_ROWS), none);
         assert_eq!(switches(&l, 0.0, f64::NAN, MAX_ROWS), none);
+    }
+
+    /// Two channels that read the same inside the span can part just before it: then the span's first sample is a
+    /// change for one and not for the other. They are two rows, whichever order the channels come in.
+    #[test]
+    fn channels_that_part_just_before_the_span_are_two_rows_in_either_order() {
+        let a_long: &[f64] = &[1.0, 0.0, 0.0, 0.0, 1.0, 1.0];
+        let b: &[f64] = &[0.0, 0.0, 0.0, 0.0, 1.0, 1.0];
+        let ab = switches(&log(&[("A long", a_long), ("B", b)]), 1.0, 5.0, MAX_ROWS);
+        let ba = switches(&log(&[("B", b), ("A long", a_long)]), 1.0, 5.0, MAX_ROWS);
+        assert_eq!(ab, ba);
+        assert_eq!(names(&ab), ["A long", "B"]);
+        assert_eq!(ab.rows[0].also, Vec::<String>::new());
+        assert_eq!(ab.rows[0].changes, [1.0, 4.0]);
+        assert_eq!(ab.rows[1].also, Vec::<String>::new());
+        assert_eq!(ab.rows[1].changes, [4.0]);
+    }
+
+    #[test]
+    fn channels_that_read_and_change_the_same_share_a_row_in_either_order() {
+        let x: &[f64] = &[0.0, 1.0, 1.0, 0.0, 0.0, 1.0];
+        let ab = switches(&log(&[("Clutch", x), ("Clutch State", x)]), 0.0, 5.0, 8);
+        let ba = switches(&log(&[("Clutch State", x), ("Clutch", x)]), 0.0, 5.0, 8);
+        assert_eq!(ab, ba);
+        assert_eq!(names(&ab), ["Clutch"]);
+        assert_eq!(ab.rows[0].also, ["Clutch State"]);
     }
 }
