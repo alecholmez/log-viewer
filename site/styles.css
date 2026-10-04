@@ -102,7 +102,7 @@ figcaption{color:var(--body)}
 .findings-shot figcaption{margin-top:4px;font-size:.9375rem;font-weight:400;color:var(--muted)}
 
 /* charts: two panels side by side as in the app, then the replay across */
-.charts{display:grid;grid-template-columns:556fr 464fr;column-gap:16px;margin-top:48px}
+.charts{display:grid;grid-template-columns:543fr 453fr;column-gap:16px;margin-top:48px}
 /* picture and caption share the rows of the grid, so the two captions start level */
 .chart{display:grid;grid-row:span 2;grid-template-rows:subgrid}
 .chart img{width:100%;border-radius:9px}
@@ -142,16 +142,16 @@ footer{padding-block:36px 56px;border-top:1px solid var(--hairline);font-size:.9
   .hero{padding-block:40px 64px}
   .hero-grid{grid-template-columns:minmax(0,1fr);gap:44px}
   /* one finding stands in for the window */
-  .hero-shot{width:auto;max-width:519px;padding:12px;background:var(--surface-shot)}
+  .hero-shot{width:auto;max-width:507px;padding:12px;background:var(--surface-shot)}
   .charts{grid-template-columns:minmax(0,1fr);row-gap:48px}
   .chart,.chart.wide{display:block;margin-top:0}
-  .chart:not(.wide) img{max-width:556px}
+  .chart:not(.wide) img{max-width:543px}
   .chart.wide figcaption{margin-top:22px}
   .frame{padding:12px}
 }
 @media (max-width: 719px){
   /* one finding in place of the panel */
-  .findings-shot picture{max-width:519px;padding:12px;border:1px solid var(--hairline);border-radius:var(--r-box);background:var(--surface-shot)}
+  .findings-shot picture{max-width:507px;padding:12px;border:1px solid var(--hairline);border-radius:var(--r-box);background:var(--surface-shot)}
   .findings-shot img{border-radius:0;-webkit-mask-image:none;mask-image:none}
   .findings-shot figcaption{margin-top:14px}
 }
