@@ -753,6 +753,35 @@ try {
     /^No new logs/.test(heldText) && releasedAndCleared,
     JSON.stringify([heldText, releasedAndCleared]),
   );
+  // a button of the message area that is hidden while it has focus must not leave the clock held.
+  // Stand in for an engine that sends no focusout for that: only a focusout that comes from blur() gets through.
+  await page.setInputFiles('#file', [{ name: 'notes.csv', mimeType: 'text/csv', buffer: Buffer.from('a,b\n1,2\n') }]);
+  await page.waitForFunction(() => /notes\.csv: /.test(document.getElementById('status').textContent));
+  await page.evaluate(() => {
+    let inBlur = false;
+    const blur = HTMLElement.prototype.blur;
+    HTMLElement.prototype.blur = function () {
+      inBlur = true;
+      try {
+        blur.call(this);
+      } finally {
+        inBlur = false;
+      }
+    };
+    addEventListener('focusout', e => !inBlur && e.stopImmediatePropagation(), true);
+  });
+  await page.focus('#msg-x');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.getElementById('status').textContent === '');
+  await page.evaluate(() => document.getElementById('watch-scan').click());
+  await page.waitForFunction(() => /^No new logs/.test(document.getElementById('status').textContent));
+  const clearedAfterKeyboardDismiss = await page
+    .waitForFunction(() => document.getElementById('status').textContent === '', null, { timeout: 8000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  check('a result clears itself after Dismiss from the keyboard', clearedAfterKeyboardDismiss);
   await page.close();
 
   // phone and tablet widths, dark mode: no sideways scroll, rail not sticky on a phone

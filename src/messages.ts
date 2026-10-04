@@ -27,6 +27,15 @@ function startClock(): void {
   timer = stay && !pointerOver && !focusInside ? window.setTimeout(() => clearMessage(), stay) : 0;
 }
 
+/**
+ * Show or hide one of the area's buttons. Focus is taken off a button before it is hidden:
+ * an engine may send no focusout for a focused button that stops being drawn, and `focusInside` would then stay true.
+ */
+function setHidden(b: HTMLElement, hidden: boolean): void {
+  if (hidden && b === document.activeElement) b.blur();
+  b.hidden = hidden;
+}
+
 function show(kind: Kind, text: string, act?: Action): void {
   if (!text) return clearMessage();
   action = act ?? null;
@@ -35,9 +44,9 @@ function show(kind: Kind, text: string, act?: Action): void {
   $('msg').classList.add('on');
   $('msg').classList.toggle('fail', kind === 'failure');
   const ab = $('msg-act');
-  ab.hidden = !act;
+  setHidden(ab, !act);
   ab.textContent = act ? act.label : '';
-  $('msg-x').hidden = kind !== 'failure';
+  setHidden($('msg-x'), kind !== 'failure');
   startClock();
 }
 
@@ -63,8 +72,8 @@ export function clearMessage(prefix = ''): void {
   pointerOver = false;
   st.textContent = '';
   $('msg').classList.remove('on', 'fail');
-  $('msg-act').hidden = true;
-  $('msg-x').hidden = true;
+  setHidden($('msg-act'), true);
+  setHidden($('msg-x'), true);
 }
 
 /** Wire the message area's buttons, and hold its clock while the pointer is over it or focus is inside it, for any message. */
