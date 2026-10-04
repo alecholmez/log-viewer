@@ -282,17 +282,12 @@ async function removeLog(log: Log): Promise<void> {
 function renderLogs(): void {
   const ol = $('logs');
   ol.textContent = '';
+  // an empty library shows one panel that says how to start, in place of the charts
+  document.querySelector('.app')!.classList.toggle('no-logs', !S.logs.length);
+  $('start').hidden = S.logs.length > 0;
   if (!S.logs.length) {
     const li = el('li', 'empty');
-    li.appendChild(el('p', '', 'Add Haltech NSP logs (.csv) to analyze them. Drop the files on this window or use Add logs.'));
-    if (isMobile)
-      li.appendChild(
-        el(
-          'p',
-          '',
-          'Add logs opens Files, which includes iCloud Drive and Google Drive. A log sent by AirDrop can be opened with Log Viewer.',
-        ),
-      );
+    li.appendChild(el('p', '', 'Logs you add are listed here.'));
     ol.appendChild(li);
     return;
   }
@@ -575,8 +570,7 @@ function renderFindings(): void {
   const r = $('find-run');
   a.textContent = '';
   r.textContent = '';
-  if (!S.findings.length)
-    a.appendChild(el('li', 'hint', S.logs.length ? 'Nothing flagged across these logs.' : 'Add logs to analyze them.'));
+  if (!S.findings.length) a.appendChild(el('li', 'hint', 'Nothing flagged across these logs.'));
   for (const f of S.findings) a.appendChild(findingNode(f));
   if (!S.runFindings.length) r.appendChild(el('li', 'hint', 'Pick a pull as run A to check it.'));
   for (const f of S.runFindings) r.appendChild(findingNode(f));
@@ -1332,7 +1326,8 @@ function wire(): void {
 
   // importing
   const file = input('file');
-  $('add-btn').addEventListener('click', () => file.click());
+  for (const id of ['add-btn', 'start-add']) $(id).addEventListener('click', () => file.click());
+  $('start-files').hidden = !isMobile;
   file.addEventListener('change', () => {
     void addFiles(Array.from(file.files || []));
     file.value = '';

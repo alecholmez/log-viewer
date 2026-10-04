@@ -7,7 +7,7 @@
     <title>Log Viewer</title>
   </head>
   <body>
-<div class="app">
+<div class="app no-logs">
   <header class="top">
     <div>
       <h1>Log Viewer</h1>
@@ -42,6 +42,19 @@
     </aside>
 
     <div class="main">
+      <section class="panel full" id="start" aria-labelledby="h-start" hidden>
+        <h2 id="h-start">Add your first log</h2>
+        <p>Add Haltech NSP logs (.csv). Drop the files on this window or use Add logs.</p>
+        <p class="hint" id="start-files" hidden>Add logs opens Files, which includes iCloud Drive and Google Drive. A log sent by AirDrop can be opened with Log Viewer.</p>
+        <button class="btn primary" id="start-add" type="button">Add logs</button>
+        <h3>What you get</h3>
+        <ul>
+          <li><b>Estimated wheel power</b> for every pull in the log.</li>
+          <li><b>Findings</b>: what to change in the tune, with values from your data.</li>
+          <li><b>Replay</b> of any channel the ECU logged.</li>
+        </ul>
+      </section>
+
       <section class="panel" aria-labelledby="h-dyno">
         <div class="panel-head">
           <h2 id="h-dyno">Estimated wheel power</h2>
@@ -119,9 +132,6 @@
           <select id="view-sel"></select>
           <button class="btn sm" id="view-back" type="button" hidden>Back</button>
           <button class="btn sm" id="chan-btn" type="button" aria-pressed="false" aria-controls="picker">Channels</button>
-          <input id="view-name" type="text" placeholder="Name this view" aria-label="View name" autocomplete="off">
-          <button class="btn sm" id="view-save" type="button">Save view</button>
-          <button class="btn sm" id="view-del" type="button">Delete view</button>
           <span class="hint" id="view-msg" role="status" aria-live="polite"></span>
           <span class="grow"></span>
           <div class="seg" role="group" aria-label="Trace axis">
@@ -136,6 +146,12 @@
             <span class="hint" id="pick-count"></span>
           </div>
           <div id="pick-list"></div>
+          <div class="row view-save">
+            <label for="view-name">Keep these channels as a view</label>
+            <input id="view-name" type="text" placeholder="Name this view" autocomplete="off">
+            <button class="btn sm" id="view-save" type="button">Save view</button>
+            <button class="btn sm" id="view-del" type="button">Delete view</button>
+          </div>
         </div>
         <div class="readouts" id="readouts"></div>
         <div class="cv-wrap" id="tr-wrap"><canvas id="tr-cv" role="img" aria-label="Logged channels around the selected span"></canvas></div>

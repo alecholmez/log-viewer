@@ -22,7 +22,7 @@ export function drawDyno(): void {
   ctx.font = '12px ' + th.body;
   if (!all.length) {
     ctx.fillStyle = th.ink2;
-    ctx.fillText(S.logs.length ? 'Pick a pull as run A.' : 'Add a log to see estimated power.', 12, 24);
+    ctx.fillText('Pick a pull as run A.', 12, 24);
     dynoGeom = null;
     return;
   }
@@ -627,7 +627,7 @@ export function draw3d(): void {
   if (sc.empty) {
     ctx.fillStyle = th.ink2;
     ctx.font = '12px ' + th.body;
-    ctx.fillText(S.logs.length ? 'No cells have enough samples yet.' : 'Add a log to fill the table.', 12, 24);
+    ctx.fillText('No cells have enough samples yet.', 12, 24);
     return;
   }
   const zs = fuel ? (sc.R > 10 ? 10 : 5) : 10;

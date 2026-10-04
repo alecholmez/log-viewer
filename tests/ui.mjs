@@ -40,6 +40,13 @@ try {
   // empty library
   let page = await open();
   check('empty library says so', (await text(page, 'sub')) === 'No logs yet' && (await page.locator('#logs .empty').count()) === 1);
+  check(
+    'empty library shows one panel that says how to start',
+    (await page.isVisible('#start')) && !(await page.isVisible('#replay-panel')) && !(await page.isVisible('#dyno-wrap')),
+  );
+  const startAdd = page.locator('#start-add');
+  const chooser = (await startAdd.count()) ? (await Promise.all([page.waitForEvent('filechooser'), startAdd.click()]))[0] : null;
+  check('its button opens the file picker', chooser?.isMultiple() === true);
   await shot(page, '01-empty');
 
   // import through the file input: one file that is not a log, then real logs
@@ -53,6 +60,7 @@ try {
   await importLogs(page);
   await settle(page);
   check('all logs imported', /^Added 8 logs, 10 new pulls\./.test(await text(page, 'status')), await text(page, 'status'));
+  check('the start panel gives way to the charts', !(await page.isVisible('#start')) && (await page.isVisible('#replay-panel')));
   check(
     'header counts',
     /8 logs · 509 channels · 7,469 samples at 21 Hz · 10 pulls · E63/.test(await text(page, 'sub')),
@@ -158,7 +166,12 @@ try {
   await shot(page, '05-fuel-table');
 
   // channel picker, custom view, rename: all saved
+  check(
+    'naming and saving a view are inside the channel picker',
+    !(await page.isVisible('#view-save')) && !(await page.isVisible('#view-name')),
+  );
   await page.click('#chan-btn');
+  check('and show once it is open', (await page.isVisible('#view-save')) && (await page.isVisible('#view-del')));
   await page.fill('#pick-q', 'coolant temp');
   await page
     .locator('#pick-list .pk:not([hidden])', { has: page.locator('.nm[title="Coolant Temperature"]') })
