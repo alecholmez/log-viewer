@@ -27,6 +27,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/configure-pages@v6
+      # Pages lets a browser keep the stylesheet and images for ten minutes. A new address for them on every deployment
+      # makes a plain reload show the new page.
+      - run: sed -i -E "s#(styles\.css|img/[a-z-]+\.webp)#\1?v=${GITHUB_SHA::7}#g" site/index.html
       - uses: actions/upload-pages-artifact@v5
         with:
           path: site
