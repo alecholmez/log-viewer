@@ -1,6 +1,6 @@
 # Log Viewer
 
-Reads ECU logs (Haltech NSP `PCLog_*.csv` today), estimates wheel power, and reports what to change in the tune.
+A virtual dyno: reads ECU logs (Haltech NSP `PCLog_*.csv` today), estimates wheel power, and reports what to change in the tune.
 One codebase for macOS, Windows, iPhone and iPad: Rust core, TypeScript canvas UI (no framework), Tauri 2 shell.
 See README.md for layout, commands and log import paths.
 
@@ -34,11 +34,14 @@ See README.md for layout, commands and log import paths.
 - Repository: https://github.com/alecholmez/log-viewer (public, Apache-2.0). Work is to be tracked as GitHub issues there.
 - Log formats: the target is every format Virtual Dyno reads (https://barnhill.bitbucket.io/, about 60 listed on 2026-10-04). Link is next.
 - A GitHub Pages site that hosts the app downloads, as that page does for Virtual Dyno. Built in `site/` (static HTML and CSS, the app's colours and type, screenshots from `tests/site-shots.mjs`), with `.github/workflows/pages.yml` to publish it.
-  Not published yet (2026-10-04): Pages is not switched on for the repository. The download rows say "Coming soon"; there is no release to link to.
+  Live at https://alecholmez.github.io/log-viewer/ since 2026-10-04; every push to `main` that changes `site/` redeploys it. The download rows say "Coming soon"; there is no release to link to.
+  It calls the app a virtual dyno and does not tie itself to NSP: the "Supported ECUs" chart lists the Virtual Dyno formats, with a check on each one the app reads (Haltech today). Add `class="yes"` and the check icon to an `<li>` when a format lands.
+  Its palette is its own, taken from the app icon (graphite, off-white, the orange as the one accent); the owner did not like the app's grey-blue on the page.
   The page describes only what has been checked: nothing about AirDrop or iPhone-specific import.
 - Replay: show on/off and state channels as rows on the timeline instead of line graphs, appearing on their own for any switch that changes during the pull. Being designed, not built.
 - App UI pass with `redesign-existing-projects`, 2026-10-04. Applied: hover, press and transition states on controls, sentence-case subheads (panel titles and tags stay in capitals), tinted shadows, `text-wrap: pretty` on prose, a car icon on the Vehicle button (Phosphor, as on the website), the 3D table growing to fill its panel, and a refused duplicate naming the file once.
-  Proposed and waiting for a yes: quieter rows in the logs rail, one getting-started panel for the empty library, a slimmer replay view bar, and the switch rows.
+  Then, same day: unselected pulls lose their boxes and the text actions their underlines; an empty library shows one "Add your first log" panel in place of the charts (`.app.no-logs`, set in `renderLogs`); naming, saving and deleting a view moved into the Channels picker.
+  Switch rows: design in `docs/superpowers/specs/2026-10-04-replay-switch-rows-design.md`, waiting for review. Not built.
 - Design work uses the taste skills in `.claude/skills` (from github.com/Leonxlnx/taste-skill, MIT): `design-taste-frontend` for the landing page, `redesign-existing-projects` for the app UI. The first says of itself that it is not for dashboards or dense product UI, so it does not apply to the app.
 
 ## Rules for this project
