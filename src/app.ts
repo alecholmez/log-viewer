@@ -953,8 +953,14 @@ function updateGridNow(): void {
 
 let swKey = '';
 let swSeq = 0;
+/** How the status line starts while a request for switch rows has failed. */
+const SW_FAILED = 'Switch rows failed: ';
 
-/** Ask the core for the switch rows of the span on screen. Runs on every draw and asks once per span. */
+/**
+ * Ask the core for the switch rows of the span on screen. Runs on every draw and asks once per span.
+ * A failed request is not retried until the span, the log or "Show switches that change" changes:
+ * retrying here would send a request on every frame while the replay plays.
+ */
 function syncSwitches(): void {
   const f = S.focus;
   const span = f && S.swShow ? replaySpan(f) : null;
@@ -974,10 +980,12 @@ function syncSwitches(): void {
       S.sw = rows;
       S.swFor = key;
       S.rev++;
+      // an earlier failure no longer holds once rows arrive; any other message stays
+      if ($('status').textContent?.startsWith(SW_FAILED)) status('');
       drawAll();
     },
     e => {
-      if (seq === swSeq) status('Switch rows failed: ' + errText(e));
+      if (seq === swSeq) status(SW_FAILED + errText(e));
     },
   );
 }

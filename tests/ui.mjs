@@ -459,6 +459,31 @@ try {
     (await box.count()) === 1 && off.rows === null && off.now === '' && off.height === bare.height && asked.length === askedBefore,
     JSON.stringify([off.rows, off.now, off.height, asked.length - askedBefore]),
   );
+
+  // a failed request says so in the status line; when rows come back for the span, the message goes
+  const errorsBefore = errors.length;
+  await page.route('**/api/switches', route => route.abort(), { times: 1 });
+  await box.check();
+  const failShown = await until(page, () => /^Switch rows failed: /.test(document.getElementById('status').textContent));
+  // not asked again for the same span: unticking and ticking the box asks again
+  await box.uncheck();
+  await box.check();
+  const rowsBack = await rowsShown(page, 8);
+  const afterFail = await text(page, 'status');
+  check(
+    'a failed request says so, and the message goes when rows arrive',
+    failShown && rowsBack && !/Switch rows failed/.test(afterFail),
+    JSON.stringify([failShown, rowsBack, afterFail]),
+  );
+  // the browser reports the aborted request on the console; that one is expected
+  errors.splice(errorsBefore, errors.length - errorsBefore, ...errors.slice(errorsBefore).filter(m => !/ERR_FAILED/.test(m)));
+  // rows that arrive clear only their own failure: another message stays
+  await page.evaluate(() => (document.getElementById('status').textContent = 'Added 1 log.'));
+  await box.uncheck();
+  await box.check();
+  await rowsShown(page, 8);
+  check('rows that arrive leave any other message alone', (await text(page, 'status')) === 'Added 1 log.', await text(page, 'status'));
+  await box.uncheck();
   await page.click('[data-smooth="high"]');
   await page.waitForTimeout(600); // settings are written a moment after the last change
   await page.close();
