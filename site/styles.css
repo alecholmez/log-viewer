@@ -119,12 +119,6 @@ figcaption{color:var(--body)}
 .ecus svg{position:absolute;left:0;top:8px;width:19px;height:19px}
 .ecus small{margin-left:8px;padding:2px 7px;border:1px solid var(--hairline-strong);border-radius:var(--r-tag);font-size:.75rem;color:var(--body)}
 
-/* how logs get in */
-.formats{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:72px;align-items:start}
-.ways > div{display:grid;grid-template-columns:11rem minmax(0,1fr);gap:24px;padding-block:20px;border-top:1px solid var(--hairline)}
-.ways > div:first-child{padding-top:6px;border-top:0}
-.ways dt{font-weight:700;color:var(--ink)}
-
 /* downloads */
 .downloads{margin-block:44px 30px;border:1px solid var(--hairline);border-radius:var(--r-box);background:var(--surface-card)}
 .downloads li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:20px;padding:22px 26px}
@@ -154,7 +148,6 @@ footer{padding-block:36px 56px;border-top:1px solid var(--hairline);font-size:.9
   .chart:not(.wide) img{max-width:556px}
   .chart.wide figcaption{margin-top:22px}
   .frame{padding:12px}
-  .formats{grid-template-columns:minmax(0,1fr);gap:40px}
 }
 @media (max-width: 719px){
   /* one finding in place of the panel */
@@ -164,7 +157,6 @@ footer{padding-block:36px 56px;border-top:1px solid var(--hairline);font-size:.9
 }
 @media (max-width: 519px){
   .wrap{padding-inline:18px}
-  .ways > div{grid-template-columns:minmax(0,1fr);gap:2px}
   .downloads li{gap:14px;padding:16px}
   .downloads svg{width:26px;height:26px}
 }
