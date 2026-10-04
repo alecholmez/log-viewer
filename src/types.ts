@@ -124,6 +124,8 @@ export interface Finding {
   at?: number;
   occurrences?: Occurrence[];
   table?: 'ign' | 'fuel';
+  /** the stretch of run A's power curve the finding is about, as computed before smoothing, and the point it names */
+  dyno?: { at: Pt; pts: Pt[] };
   log?: Log;
 }
 

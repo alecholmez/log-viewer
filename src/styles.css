@@ -139,6 +139,8 @@ details .fields{margin-top:8px}
 .key.r1{border-color:var(--run-b)} .key.r2{border-color:var(--run-c)}
 .key.dash{border-top:2px dashed var(--ink-2)} .key.solid{border-top:2px solid var(--ink-2)}
 .key.band{height:9px;border:0;background:var(--run-a);opacity:.2;border-radius:2px}
+.key.mark{width:0;border:5px solid transparent;border-top:0;border-bottom:8px solid var(--ink-2);border-radius:0}
+.key.mark.warn{border-bottom-color:var(--warn)} .key.mark.crit{border-bottom-color:var(--crit)}
 .stat .nums{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;font-variant-numeric:tabular-nums}
 .stat .big{font-family:var(--font-display);font-weight:900;font-size:24px;line-height:1.1;letter-spacing:-.01em}
 .stat .big small{font-size:12px;font-weight:400;letter-spacing:0;color:var(--ink-2);margin-left:3px}

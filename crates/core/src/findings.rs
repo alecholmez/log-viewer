@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 use regex::Regex;
 use serde::Serialize;
 
-use crate::dyno::{Dyno, Pull};
+use crate::dyno::{Dyno, Pt, Pull};
 use crate::fmt::{fx, js_round, n0, num, sgn};
 use crate::haltech::name;
 use crate::log::Log;
@@ -97,6 +97,15 @@ pub struct Occurrence {
     pub label: String,
 }
 
+/// The stretch of a run's power curve that a finding is about, as computed, before the drawn curve is smoothed.
+/// The chart draws it over the smoothed curve, so it shows what the finding describes at any smoothing level.
+#[derive(Clone, Debug, Serialize)]
+pub struct DynoMark {
+    /// the point the finding names
+    pub at: Pt,
+    pub pts: Vec<Pt>,
+}
+
 #[derive(Clone, Debug, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Finding {
@@ -127,6 +136,9 @@ pub struct Finding {
     /// set when the finding points at a table rather than a moment in a log
     #[serde(skip_serializing_if = "Option::is_none")]
     pub table: Option<String>,
+    /// set when the finding is about a stretch of the run's power curve
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dyno: Option<DynoMark>,
 }
 
 impl Finding {
@@ -1388,8 +1400,8 @@ fn find_pull_dips(log: &Log, pull: &Pull, dy: &Dyno, out: &mut Vec<Finding>) {
         return;
     }
     let mut peak = c[0];
-    let mut dip: Option<(crate::dyno::Pt, crate::dyno::Pt)> = None;
-    let mut rec: Option<crate::dyno::Pt> = None;
+    let mut dip: Option<(Pt, Pt)> = None;
+    let mut rec: Option<Pt> = None;
     for p in c.iter().skip(1) {
         if let Some((from, _)) = dip {
             if p.tq >= from.tq * 0.97 {
@@ -1472,6 +1484,14 @@ fn find_pull_dips(log: &Log, pull: &Pull, dy: &Dyno, out: &mut Vec<Finding>) {
             why: Some("A dip that the engine recovers from is power left on the table, and it usually has one cause you can see in the log.".into()),
             steps,
             channels: vec![k(tr("calc:tq")), t_ign(), t_ped(), t_map(), t_lam(), t_rpm()],
+            dyno: Some(DynoMark {
+                at: low,
+                pts: c
+                    .iter()
+                    .filter(|p| p.i >= from.i && p.i <= rec.i)
+                    .copied()
+                    .collect(),
+            }),
             ..Default::default()
         }
         .at_log(log, pull.t0, pull.t1, low.t),

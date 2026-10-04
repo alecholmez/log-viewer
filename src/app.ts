@@ -439,6 +439,8 @@ function renderStats(): void {
     if (S.view !== 'tq') item('solid', 'Power, whp');
     if (S.view !== 'hp') item('dash', 'Torque, lb-ft');
     if (S.band && v && S.view !== 'tq') item('band', 'Run A power if weight is off by ± ' + fmt(v.unc / LB) + ' lb');
+    for (const f of S.runFindings)
+      if (f.dyno) item('mark ' + f.sev, f.title + (S.smooth === 'off' ? '' : '. Thin line: the curve before smoothing'));
   }
   $('dyno-note').textContent = v
     ? 'Computed for ' +

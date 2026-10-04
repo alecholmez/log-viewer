@@ -110,6 +110,22 @@ try {
   await page.click('[data-smooth="med"]');
   await page.waitForFunction(() => /164\s*whp/.test(document.getElementById('stats').innerText));
 
+  // a finding about the shape of the curve is marked on the chart, with the curve before smoothing drawn across it
+  await page.locator('.pull', { hasText: '3rd gear · 2,974' }).locator('button.r0').click();
+  await page.waitForFunction(() => /Torque dip at 3,257 rpm/.test(document.getElementById('legend').textContent));
+  const dip = await page.evaluate(() => ({
+    legend: document.getElementById('legend').textContent,
+    pts: window.__logViewer.runFindings.find(f => f.dyno)?.dyno.pts.length ?? 0,
+  }));
+  check('torque dip is marked on the chart', /before smoothing/.test(dip.legend) && dip.pts > 3, JSON.stringify(dip));
+  await shot(page, '02b-dip');
+  await page.click('[data-smooth="off"]');
+  await page.waitForFunction(() => !/before smoothing/.test(document.getElementById('legend').textContent));
+  check('with smoothing off the mark stands alone', /Torque dip at 3,257 rpm/.test(await text(page, 'legend')), await text(page, 'legend'));
+  await page.click('[data-smooth="med"]');
+  await page.locator('.pull', { hasText: '2,551–5,959' }).locator('button.r0').click();
+  await page.waitForFunction(() => /164\s*whp/.test(document.getElementById('stats').innerText));
+
   // vehicle dialog: weight changes the estimate
   await page.click('#veh-btn');
   await page.fill('#v-driver', '340');

@@ -16,7 +16,9 @@ export function drawDyno(): void {
   const { ctx, w, h } = prep($<HTMLCanvasElement>('dyno-cv'));
   const th = theme();
   const cores: Pt[][] = S.dyn.map(d => (d ? d.core : []));
-  const all = cores.flat();
+  // findings about a stretch of run A's curve bring that stretch as computed, before smoothing
+  const marks = S.dyn[0] ? S.runFindings.flatMap(f => (f.dyno ? [{ sev: f.sev, ...f.dyno }] : [])) : [];
+  const all = cores.flat().concat(marks.flatMap(k => k.pts));
   ctx.font = '12px ' + th.body;
   if (!all.length) {
     ctx.fillStyle = th.ink2;
@@ -83,12 +85,12 @@ export function drawDyno(): void {
     ctx.globalAlpha = 1;
   }
 
-  const line = (c: Pt[], key: 'hp' | 'tq', color: string, dash: boolean) => {
+  const line = (c: Pt[], key: 'hp' | 'tq', color: string, dash: boolean, width = 2) => {
     if (!c.length) return;
     ctx.beginPath();
     c.forEach((p, i) => (i ? ctx.lineTo(X(p.rpm), Y(p[key])) : ctx.moveTo(X(p.rpm), Y(p[key]))));
     ctx.setLineDash(dash ? [6, 4] : []);
-    ctx.lineWidth = 2;
+    ctx.lineWidth = width;
     ctx.lineJoin = 'round';
     ctx.strokeStyle = color;
     ctx.stroke();
@@ -96,6 +98,22 @@ export function drawDyno(): void {
   };
   for (let r = 2; r >= 0; r--) if (S.view !== 'hp') line(cores[r], 'tq', th.run[r], true);
   for (let r = 2; r >= 0; r--) if (S.view !== 'tq') line(cores[r], 'hp', th.run[r], false);
+
+  // what a finding describes stays visible on a smoothed curve: the stretch as computed, thin, and a pointer under the point it names.
+  // The findings here are about torque, so they sit on the torque curve unless only power is shown.
+  for (const k of marks) {
+    const key = S.view === 'hp' ? 'hp' : 'tq';
+    if (S.smooth !== 'off') line(k.pts, key, th.run[0], false, 1.25);
+    const x = X(k.at.rpm);
+    const y = Y(k.at[key]) + 7;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x - 5, y + 8);
+    ctx.lineTo(x + 5, y + 8);
+    ctx.closePath();
+    ctx.fillStyle = k.sev === 'crit' ? th.crit : k.sev === 'warn' ? th.warn : th.ink2;
+    ctx.fill();
+  }
 
   // direct labels at the end of run A
   const A = cores[0];

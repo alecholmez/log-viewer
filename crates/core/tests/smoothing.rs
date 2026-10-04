@@ -175,3 +175,66 @@ fn the_fuel_check_does_not_change_with_the_smoothing_level() {
     }
     assert!(checked > 0, "no pull in the sample logs has a fuel check");
 }
+
+/// A finding about the shape of the curve carries that stretch of the curve as computed,
+/// so the chart can show what the finding describes at any smoothing level.
+#[test]
+fn a_torque_dip_finding_carries_the_stretch_of_curve_it_describes() {
+    let Some(mut s) = sample_session() else {
+        return;
+    };
+    let veh = vehicle();
+    let mut dips = 0;
+    for key in pull_keys(&mut s) {
+        let as_computed = dyno(&mut s, &veh, &key)["runs"][0]["core"].clone();
+        let smoothed = dyno(&mut s, &with_smooth(&veh, 250.0), &key);
+        for f in smoothed["checks"].as_array().unwrap() {
+            if !f["title"].as_str().unwrap().starts_with("Torque dip") {
+                continue;
+            }
+            dips += 1;
+            let (at, pts) = (&f["dyno"]["at"], &f["dyno"]["pts"]);
+            assert!(
+                pts.is_array(),
+                "{key}: the dip finding has no curve for the chart"
+            );
+            let pts = pts.as_array().unwrap();
+
+            // the stretch is the curve as computed, not the smoothed one
+            for p in pts {
+                let same = as_computed
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|q| q["i"] == p["i"]);
+                assert_eq!(
+                    Some(p),
+                    same,
+                    "{key}: a point of the stretch is not on the curve as computed"
+                );
+            }
+            // it runs from before the dip to the recovery, and names the lowest point
+            let tq = column(&f["dyno"]["pts"], "tq");
+            let (first, last) = (tq[0], tq[tq.len() - 1]);
+            let low = tq.iter().cloned().fold(f64::MAX, f64::min);
+            assert!(
+                low < first * 0.92 && first - low >= 12.0,
+                "{key}: no dip in the stretch: {tq:?}"
+            );
+            assert!(
+                last >= first * 0.97,
+                "{key}: the stretch ends before torque recovers: {tq:?}"
+            );
+            assert_eq!(
+                at["tq"].as_f64().unwrap(),
+                low,
+                "{key}: the named point is not the lowest"
+            );
+            assert!(
+                pts.contains(at),
+                "{key}: the named point is not on the stretch"
+            );
+        }
+    }
+    assert!(dips > 0, "no torque dip finding in the sample logs");
+}
