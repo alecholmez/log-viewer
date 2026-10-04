@@ -969,8 +969,8 @@ const SW_FAILED = 'Switch rows failed: ';
 
 /**
  * Ask the core for the switch rows of the span on screen. Runs on every draw and asks once per span.
- * A failed request is not retried until the span, the log or "Show switches that change" changes:
- * retrying here would send a request on every frame while the replay plays.
+ * A failed request is not retried until the span, the log or "Show switches that change" changes,
+ * or Try again asks for it (`retrySwitches`): retrying here would send a request on every frame while the replay plays.
  */
 function syncSwitches(): void {
   const f = S.focus;

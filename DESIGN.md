@@ -115,7 +115,7 @@ Two families. **Lato** for headlines, panel titles and big figures. Black (900) 
 - **Screenshot.** The app itself, on real logs, never a drawing of it. A whole window gets a `hairline` frame with 12px corners. A panel is placed straight on the canvas.
 - **Chart of supported ECUs.** One list in columns. A supported entry is `ink`, bold, with a check; the rest are `muted`.
 - **Status tag.** 13px bold text in a `hairline-strong` outline with 6px corners, for "Coming soon" and "Next".
-- **Message.** One line fixed to the bottom of the app's window: `surface-card` with a `hairline-strong` outline and 12px corners, as the tooltip is. A result is `body` text and clears itself; a failure is `ink` text, stays until it is dismissed, and carries the action that fixes it. Never red, never a filled bar.
+- **Message.** One line fixed to the bottom of the app's window: `surface-card` with the tooltip's `hairline-strong` outline, and 12px corners. A result is `body` text and clears itself; a failure is `ink` text, stays until it is dismissed, and carries the action that fixes it. Never red, never a filled bar.
 
 ## 5. Layout
 

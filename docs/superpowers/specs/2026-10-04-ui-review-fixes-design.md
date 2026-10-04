@@ -57,7 +57,7 @@ Today 17 places write to one line in the header. The header scrolls away, and a 
 
 ### The message area
 
-- One line fixed to the bottom of the window, centred, above the page and under a tooltip. It looks like the tooltip: a `--surface` box with a `--rule` outline and 12px corners, no shadow.
+- One line fixed to the bottom of the window, centred, above the page and under a tooltip. It is a `--surface` box with the tooltip's `--rule` outline, 12px corners and no shadow.
 - It holds the text, an action button when the message has one, and `Dismiss` on a failure.
 - Three kinds:
   - **A result** ("Added 8 logs, 10 new pulls.") clears itself after 5 seconds, or 10 when it carries an action.

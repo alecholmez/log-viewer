@@ -732,6 +732,27 @@ try {
     /notes\.csv: /.test(await text(page, 'status')),
     await text(page, 'status'),
   );
+  // a result that arrives while the pointer is on the message area waits for the pointer to leave
+  await page.click('#msg-x');
+  await page.click('#watch-scan');
+  await page.waitForFunction(() => /^No new logs/.test(document.getElementById('status').textContent));
+  await page.hover('#msg');
+  // a second result arrives with the pointer still there: a click made in the page does not move the pointer
+  await page.evaluate(() => document.getElementById('watch-scan').click());
+  await page.waitForTimeout(5600);
+  const heldText = await text(page, 'status');
+  await page.mouse.move(5, 5);
+  const releasedAndCleared = await page
+    .waitForFunction(() => document.getElementById('status').textContent === '', null, { timeout: 8000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  check(
+    'a result under the pointer stays, and clears once the pointer leaves',
+    /^No new logs/.test(heldText) && releasedAndCleared,
+    JSON.stringify([heldText, releasedAndCleared]),
+  );
   await page.close();
 
   // phone and tablet widths, dark mode: no sideways scroll, rail not sticky on a phone

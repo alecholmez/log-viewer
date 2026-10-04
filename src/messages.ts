@@ -18,10 +18,13 @@ let timer = 0;
 /** How long the message on screen stays, in ms. 0: it does not clear itself. */
 let stay = 0;
 let action: Action | null = null;
+/** Whether the pointer is over the area, and whether focus is inside it. The clock does not run while either is true. */
+let pointerOver = false;
+let focusInside = false;
 
 function startClock(): void {
   clearTimeout(timer);
-  timer = stay ? window.setTimeout(() => clearMessage(), stay) : 0;
+  timer = stay && !pointerOver && !focusInside ? window.setTimeout(() => clearMessage(), stay) : 0;
 }
 
 function show(kind: Kind, text: string, act?: Action): void {
@@ -56,13 +59,15 @@ export function clearMessage(prefix = ''): void {
   timer = 0;
   stay = 0;
   action = null;
+  // a cleared area stops receiving pointer events, so its pointerleave may never come
+  pointerOver = false;
   st.textContent = '';
   $('msg').classList.remove('on', 'fail');
   $('msg-act').hidden = true;
   $('msg-x').hidden = true;
 }
 
-/** Wire the message area's buttons, and stop its clock while the pointer or the focus is on it. */
+/** Wire the message area's buttons, and hold its clock while the pointer is over it or focus is inside it, for any message. */
 export function wireMessages(): void {
   const box = $('msg');
   $('msg-x').addEventListener('click', () => clearMessage());
@@ -71,9 +76,24 @@ export function wireMessages(): void {
     clearMessage();
     a?.run();
   });
-  const hold = () => clearTimeout(timer);
-  box.addEventListener('pointerenter', hold);
-  box.addEventListener('focusin', hold);
-  box.addEventListener('pointerleave', startClock);
-  box.addEventListener('focusout', startClock);
+  const track = (set: () => void) => () => {
+    set();
+    startClock();
+  };
+  box.addEventListener(
+    'pointerenter',
+    track(() => (pointerOver = true)),
+  );
+  box.addEventListener(
+    'pointerleave',
+    track(() => (pointerOver = false)),
+  );
+  box.addEventListener(
+    'focusin',
+    track(() => (focusInside = true)),
+  );
+  box.addEventListener(
+    'focusout',
+    track(() => (focusInside = false)),
+  );
 }
