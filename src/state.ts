@@ -275,6 +275,8 @@ export const S = {
   swNow: [] as string[],
   /** "Show switches that change" in the Channels picker */
   swShow: true,
+  /** index of the switch row the pointer is on */
+  swHover: null as number | null,
 };
 
 /** The view on screen: a finding's own channels while one is being shown, otherwise the user's working view. */

@@ -61,6 +61,7 @@ crates/core        Rust. All parsing and analysis. No UI or platform code.
   src/dyno.rs        pull detection, virtual dyno
   src/table.rs       ignition and fuel tables binned from logs
   src/findings.rs    detectors: what is wrong, why it matters, what to change
+  src/switches.rs    on/off channels and when they change, for the replay's switch rows
   src/session.rs     library on disk and the command surface (`Session::dispatch`)
 crates/devserver   Rust. The same commands over HTTP, for a browser and for tests.
 src-tauri          Rust. The native shell: owns a Session, forwards commands, handles opened files.
@@ -75,16 +76,16 @@ site               the website: one static page, published to GitHub Pages
 DESIGN.md          the design system: colours, type and rules for the site and the app
 ```
 
-Every platform runs the same `Session::dispatch`. The UI asks for `logs`, `log_data`, `overview`, `dyno` and so on, and draws what comes back. Numbers are computed in Rust; the UI only formats them.
+Every platform runs the same `Session::dispatch`. The UI asks for `logs`, `log_data`, `overview`, `dyno`, `switches` and so on, and draws what comes back. Numbers are computed in Rust; the UI only formats them.
 
 The library is in the system's app-data directory for `io.waypoint.logviewer` (`~/Library/Application Support/io.waypoint.logviewer` on macOS): `logs/` holds the imported files, `settings.json` holds the vehicle, saved views and names.
 
 ## Tests
 
 ```sh
-npm run test:core    # core against a snapshot from the real logs; library import, duplicates, watch folder
+npm run test:core    # core against a snapshot from the real logs; library import, duplicates, watch folder; switch rows
 npm run build && cargo build --release -p logviewer-dev
-npm run test:ui      # drives the UI in a browser: import, dyno, findings, views, replay, phone and tablet widths
+npm run test:ui      # drives the UI in a browser: import, dyno, findings, views, replay, switch rows, phone and tablet widths
 ```
 
 `crates/core/tests/golden.json` holds every pull, table cell, finding sentence and dyno curve for the logs in `testdata/logs`. A change in the analysis shows up as a diff against it. After an intended change, refresh it with `UPDATE_GOLDEN=1 cargo test -p logviewer-core`.
@@ -119,5 +120,6 @@ The screenshots are the app itself on the logs in `testdata/logs`, so retake the
 
 - Unit scaling for NSP channel types was worked out from the logs, not from Haltech documentation. The common ones (RPM, pressure, lambda, angle, temperature, percentage) are checked against plausible engine values; unusual channel types fall back to raw values.
 - The power curve is smoothed along engine speed; **Smoothing** above the chart sets how much, and Off shows the curve as first computed. The peaks are read from the curve that is drawn, so they move a little with the setting. The curve keeps its whole rpm range at every level. Findings and the fuel check are read from the curve as first computed, so the setting does not change them. A finding about the shape of the curve, such as a torque dip, is marked on the chart: a pointer under the point it names, and a thin line showing that stretch before smoothing.
+- Under the replay traces, on/off channels are drawn as switch rows: a bar that is filled while the switch is on. NSP does not mark its switches, so the core reads them from the data: a channel is a switch when every sample it has in the log is exactly 0 or 1 and both occur. A switch gets a row when it changes inside the span on screen. Channels that read the same at every sample of the span on screen and change at the same samples share one row under the shortest name; pointing at the row lists the others and marks its changes on the traces. At most eight rows are shown, in order of first change, and the note under the traces counts the rest. A stretch with no samples is left empty. By RPM hides the rows. **Show switches that change** in Channels turns them off.
 - The virtual dyno is road-load math: mass × acceleration + drag + rolling resistance. Road gradient and wind are not measured, so compare runs on the same road rather than trusting one peak. Two checks are shown with each run: ECU speed against gearing, and commanded fuel flow against the power estimate.
 - The vehicle catalog is a small sample. The 2013 BRZ is from Subaru's specification sheet; treat the rest as starting points and override them.

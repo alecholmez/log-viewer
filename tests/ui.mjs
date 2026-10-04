@@ -501,6 +501,34 @@ try {
   await clutchTrace.click();
   await page.fill('#pick-q', '');
 
+  // pointing at a row: the other names of the switch in the tooltip, and a line through the traces at each of its changes
+  const shown = await replay(page);
+  const clutch = shown.rows?.[2];
+  // one pixel under the top edge of the first trace: nothing else is drawn there
+  const lineAt = t => pixel(page, xAt(shown, t), TG.lab + 1);
+  const pointAt = y => page.locator('#tr-cv').hover({ position: { x: xAt(shown, shown.w0 + 3), y } });
+  await pointAt(barY(shown, 2));
+  const tip = await page.evaluate(() => (document.getElementById('tip').hidden ? '' : document.getElementById('tip').innerText));
+  check(
+    'pointing at a row lists the other names of the switch',
+    /^Clutch State\s[\s\S]*Also logged as\s*AVI6 Switch State\s*Also logged as\s*Clutch Switch Input State/.test(tip),
+    tip.replace(/\n/g, ' | '),
+  );
+  const lines = [];
+  for (const t of clutch?.changes ?? []) lines.push(await lineAt(t));
+  check(
+    'and draws a line through the traces at each of its changes',
+    lines.length === 4 && lines.every(p => sameColour(p, ink2)),
+    JSON.stringify(lines),
+  );
+  // the upshift row changes 45 ms after the clutch does, six pixels along
+  const other = await lineAt(shown.rows?.[3]?.changes[0] ?? 0);
+  check('no other row draws its changes', !sameColour(other, ink2), JSON.stringify(other));
+  await shot(page, '06d-switch-row-pointed');
+  await pointAt(TG.lab + 20);
+  const away = [await page.evaluate(() => window.__logViewer.swHover), await lineAt(clutch?.changes[0] ?? 0)];
+  check('the lines go when the pointer moves up to the traces', away[0] === null && !sameColour(away[1], ink2), JSON.stringify(away));
+
   // a saved smoothing level the app does not know falls back to Medium, also when it names something every object has
   await page.waitForTimeout(600); // let the write this page scheduled on opening finish first
   const saved = await (await fetch(url + 'api/get_settings', { method: 'POST', body: '{}' })).json();

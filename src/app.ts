@@ -1,7 +1,20 @@
 // The app: loads the library from the core, renders the panels and wires the controls.
 
 import { api, inTauri, isMobile, onLogsChanged, pickFolder } from './api';
-import { atRunRpm, draw3d, drawDyno, drawTraces, dropTraceCache, dynoHover, t3Hover, tableScale, trX, traceLayout } from './charts';
+import {
+  atRunRpm,
+  draw3d,
+  drawDyno,
+  drawTraces,
+  dropTraceCache,
+  dynoHover,
+  switchAt,
+  switchRowAt,
+  t3Hover,
+  tableScale,
+  trX,
+  traceLayout,
+} from './charts';
 import { atRpm, buildLog, chanMeta, clamp, fixTable, valAt } from './data';
 import {
   $,
@@ -952,6 +965,7 @@ function syncSwitches(): void {
   // rows for another span must not be drawn against this one while the new rows are on their way
   S.sw = null;
   S.swFor = '';
+  S.swHover = null;
   S.rev++;
   if (!f || !span) return;
   api.switches(f.log.key, span[0], span[1]).then(
@@ -1258,6 +1272,7 @@ function wire(): void {
       /* capture is a nicety */
     }
     S.hoverX = null;
+    S.swHover = null;
     hideTip();
     scrub(e);
     drawAll();
@@ -1272,6 +1287,19 @@ function wire(): void {
     }
     if (e.pointerType === 'touch') return;
     const x = trX(e);
+    const k = switchRowAt(e);
+    S.swHover = k;
+    if (k !== null) {
+      // on a switch row: what it reads there and its other names, with its changes marked through the traces
+      const row = L.rows[k];
+      S.hoverX = null;
+      showTip(e.clientX, e.clientY, row.name, [
+        { label: (x - L.x0).toFixed(2) + ' s', value: switchAt(row, x) },
+        ...row.also.map(name => ({ label: 'Also logged as', value: name })),
+      ]);
+      drawTraces();
+      return;
+    }
     const th = theme();
     const log = S.focus.log;
     const rows: TipRow[] = [];
@@ -1297,6 +1325,7 @@ function wire(): void {
   tc.addEventListener('pointercancel', endScrub);
   tc.addEventListener('pointerleave', () => {
     S.hoverX = null;
+    S.swHover = null;
     hideTip();
     drawTraces();
   });

@@ -292,6 +292,15 @@ export function switchAt(row: SwitchRow, t: number): 'On' | 'Off' | '–' {
   return inside(row.gaps) ? '–' : inside(row.on) ? 'On' : 'Off';
 }
 
+/** Index of the switch row under the pointer, or null. A row is its name and its bar. */
+export function switchRowAt(e: PointerEvent): number | null {
+  const L = trGeom;
+  if (!L || !L.rows.length) return null;
+  const y = e.clientY - $('tr-cv').getBoundingClientRect().top - L.swY - SW.top;
+  const k = Math.floor(y / SW_PITCH);
+  return y >= 0 && k < L.rows.length ? k : null;
+}
+
 /** What the note under the traces says about the switch rows. */
 function switchNote(rpmMode: boolean): string {
   const sw = shownSwitches();
@@ -595,6 +604,19 @@ export function drawTraces(): void {
     ctx.beginPath();
     ctx.moveTo(x, top);
     ctx.lineTo(x, bottom);
+    ctx.stroke();
+  }
+  // the row the pointer is on marks each of its changes through the traces; no other row does, so the traces stay clean
+  const pointed = S.swHover;
+  if (pointed !== null && L.rows[pointed]) {
+    ctx.strokeStyle = th.ink2;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const t of L.rows[pointed].changes) {
+      const x = Math.round(L.X(t)) + 0.5;
+      ctx.moveTo(x, top);
+      ctx.lineTo(x, swBarY(L, pointed) + SW.bar);
+    }
     ctx.stroke();
   }
   // playhead: run A's log in RPM mode, the focused log in time mode

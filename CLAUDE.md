@@ -8,7 +8,7 @@ See README.md for layout, commands and log import paths.
 
 - `npm install` then `npm run app` — desktop app in dev mode (`tauri dev`). `./run-app.command` does the same and logs to `run-app.log`.
 - `npm run app:build` — installers for the current OS.
-- `npm run test:core` — core against `crates/core/tests/golden.json` (snapshot from `testdata/logs`) plus library tests.
+- `npm run test:core` — core against `crates/core/tests/golden.json` (snapshot from `testdata/logs`) plus library and switch-row tests.
 - `npm run build && cargo build --release -p logviewer-dev && npm run test:ui` — Playwright end-to-end test of the UI against the real core over HTTP.
 - `npm run core -- --dir .logviewer` + `npm run dev` — UI in a browser without the native shell.
 - `npm run site:shots` — retakes the website's screenshots in `site/img` from the real UI (same builds as the UI test). Preview the site with `python3 -m http.server 4173 -d site`.
@@ -43,10 +43,12 @@ See README.md for layout, commands and log import paths.
   Light is the default theme (owner call 2026-10-04, after seeing a dark-only page). The site follows the system and is light for every visitor; the dark theme stays defined for the app's dark mode.
   The app follows it since 2026-10-04: the system's values sit under the app's existing CSS variable names (`--bg`, `--surface`, `--ink`, `--grid`, `--rule`; `--crit` is the redline), Lato sets titles and figures and Roboto the text (`@fontsource/roboto`), corners are 6, 8 and 12px, panels have no border and sit on one faint shadow, selected controls are pale chips, panel titles and tags are sentence case, and the header's rule ends in the redline.
   The page describes only what has been checked: nothing about AirDrop or iPhone-specific import.
-- Replay: show on/off and state channels as rows on the timeline instead of line graphs, appearing on their own for any switch that changes during the pull. Being designed, not built.
+- Replay: on/off channels are rows under the traces, appearing on their own for any switch that changes in the span on screen. Built from `docs/superpowers/specs/2026-10-04-replay-switch-rows-design.md` by `docs/superpowers/plans/2026-10-04-replay-switch-rows.md`; seen in the browser test, not yet in the native window.
+  The traces and the rows take the stretch of the log they show from `replaySpan` in `src/state.ts`, so a zoom changes one place.
+  The website's replay screenshot predates the rows. `npm run site:shots` retakes it; the image gets taller, so its `height` in `site/index.html` must follow.
+  Still to design: channels with a small set of states (gear, launch control state, active table). They need value labels the log does not carry, so they stay as traces.
 - App UI pass with `redesign-existing-projects`, 2026-10-04. Applied: hover, press and transition states on controls, sentence-case subheads, `text-wrap: pretty` on prose, a car icon on the Vehicle button (Phosphor, as on the website), the 3D table growing to fill its panel, and a refused duplicate naming the file once.
   Then, same day: unselected pulls lose their boxes and the text actions their underlines; an empty library shows one "Add your first log" panel in place of the charts (`.app.no-logs`, set in `renderLogs`); naming, saving and deleting a view moved into the Channels picker.
-  Switch rows: design in `docs/superpowers/specs/2026-10-04-replay-switch-rows-design.md`, waiting for review. Not built.
 - Design work uses the taste skills in `.claude/skills` (from github.com/Leonxlnx/taste-skill, MIT): `design-taste-frontend` for the landing page, `redesign-existing-projects` for the app UI. The first says of itself that it is not for dashboards or dense product UI, so it does not apply to the app.
 
 ## Rules for this project
@@ -59,6 +61,7 @@ See README.md for layout, commands and log import paths.
 - Findings are the product. Each one states evidence from the log, why it matters, and numbered changes with values derived from the data. Readers range from tuners to people starting from a base map.
 - NSP unit scaling in `haltech.rs` was inferred from logs, not from Haltech documentation.
 - Other ECUs (Link next) go in a module beside `haltech.rs`; the dyno and tables use only the channel roles in `log.rs`.
+- Switch rows: what is a switch, which channels share a row (they read the same at every sample of the span on screen and change at the same samples), the spans, the order and the limit of eight are decided in `crates/core/src/switches.rs`. `src/charts.ts` draws the spans the core returns and reads no samples for them. Their values are tested in `crates/core/tests/switches.rs`, not in the golden snapshot.
 
 ## The test car (for sanity checks)
 
