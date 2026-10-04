@@ -1,0 +1,29 @@
+[package]
+name = "log-viewer"
+version = "0.1.0"
+edition = "2021"
+description = "Reads ECU logs, estimates wheel power and says what to change in the tune"
+publish = false
+
+# The shell is kept out of the workspace so `cargo test` at the repository root needs no GUI libraries.
+[workspace]
+
+[lib]
+name = "log_viewer_lib"
+# staticlib and cdylib are what the iOS and Android projects link against
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+logviewer-core = { path = "../crates/core" }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

@@ -1,0 +1,30 @@
+{
+  "name": "log-viewer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "check": "tsc --noEmit",
+    "format": "prettier --write \"src/**/*.ts\" tests vite.config.ts",
+    "tauri": "tauri",
+    "app": "tauri dev",
+    "app:build": "tauri build",
+    "core": "cargo run --release -p logviewer-dev --",
+    "test:core": "cargo test --release -p logviewer-core",
+    "test:ui": "node tests/ui.mjs"
+  },
+  "dependencies": {
+    "@fontsource/lato": "^5.2.0",
+    "@tauri-apps/api": "^2.12.0",
+    "@tauri-apps/plugin-dialog": "^2.8.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.0",
+    "playwright": "^1.50.0",
+    "prettier": "^3.6.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.0.0"
+  }
+}

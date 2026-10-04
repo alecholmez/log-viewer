@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Log Viewer</title>
+  </head>
+  <body>
+<div class="app">
+  <header class="top">
+    <div>
+      <h1>Log Viewer</h1>
+      <p class="sub" id="sub">Opening the library</p>
+    </div>
+    <div class="row">
+      <span id="status" role="status" aria-live="polite"></span>
+      <button class="btn icon" id="veh-btn" type="button" aria-haspopup="dialog" aria-label="Vehicle settings"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.2 2.2M16.9 16.9l2.2 2.2M4.9 19.1l2.2-2.2M16.9 7.1l2.2-2.2"/></svg><span id="veh-btn-txt">Vehicle</span></button>
+      <button class="btn primary" id="add-btn" type="button">Add logs</button>
+      <input id="file" type="file" accept=".csv,text/csv" multiple hidden>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="rail">
+      <section class="panel" aria-labelledby="h-logs">
+        <h2 id="h-logs">Logs and pulls</h2>
+        <p class="hint">A is replayed. B and C overlay on the charts.</p>
+        <ol class="logs" id="logs"></ol>
+        <div class="rail-foot" id="watch" hidden>
+          <h3 style="margin:0">Watch folder</h3>
+          <p class="path" id="watch-path"></p>
+          <input id="watch-in" type="text" placeholder="Folder path" aria-label="Folder to watch" autocomplete="off" spellcheck="false" hidden>
+          <div class="row">
+            <button class="btn sm" id="watch-pick" type="button">Choose folder</button>
+            <button class="btn sm" id="watch-scan" type="button">Check now</button>
+            <button class="btn sm" id="watch-stop" type="button">Stop</button>
+          </div>
+        </div>
+      </section>
+
+    </aside>
+
+    <div class="main">
+      <section class="panel" aria-labelledby="h-dyno">
+        <div class="panel-head">
+          <h2 id="h-dyno">Estimated wheel power</h2>
+          <div class="row">
+            <span class="lbl" id="smooth-lbl">Smoothing</span>
+            <div class="seg" role="group" aria-labelledby="smooth-lbl">
+              <button type="button" data-smooth="off" aria-pressed="false">Off</button>
+              <button type="button" data-smooth="low" aria-pressed="false">Low</button>
+              <button type="button" data-smooth="med" aria-pressed="true">Medium</button>
+              <button type="button" data-smooth="high" aria-pressed="false">High</button>
+            </div>
+            <div class="seg" role="group" aria-label="Curves shown">
+              <button type="button" data-view="both" aria-pressed="true">Both</button>
+              <button type="button" data-view="hp" aria-pressed="false">Power</button>
+              <button type="button" data-view="tq" aria-pressed="false">Torque</button>
+            </div>
+            <button class="btn sm" id="tbl-btn" type="button" aria-pressed="false">Table</button>
+          </div>
+        </div>
+        <div class="stats" id="stats"></div>
+        <div class="legend" id="legend"></div>
+        <div class="cv-wrap" id="dyno-wrap"><canvas id="dyno-cv" role="img" aria-label="Estimated wheel power and torque against engine speed for the selected pulls"></canvas></div>
+        <div class="tbl-wrap" id="dyno-tbl" hidden></div>
+        <p class="note" id="dyno-note"></p>
+      </section>
+
+      <section class="panel" id="table-panel" aria-labelledby="h-t3">
+        <div class="panel-head">
+          <h2 id="h-t3">Ignition table</h2>
+          <div class="row">
+            <div class="seg" role="group" aria-label="Table">
+              <button type="button" data-tmode="ign" aria-pressed="true">Ignition</button>
+              <button type="button" data-tmode="fuel" aria-pressed="false">Fuel</button>
+            </div>
+            <div class="seg" role="group" aria-label="Table view">
+              <button type="button" data-tview="3d" aria-pressed="true">3D</button>
+              <button type="button" data-tview="grid" aria-pressed="false">Grid</button>
+            </div>
+            <div class="seg" role="group" aria-label="Cell size">
+              <button type="button" data-tres="coarse" aria-pressed="true">500 × 20</button>
+              <button type="button" data-tres="fine" aria-pressed="false">250 × 10</button>
+            </div>
+          </div>
+        </div>
+        <div class="cv-wrap" id="t3-wrap"><canvas id="t3-cv" tabindex="0" role="img" aria-label="3D table by engine speed and manifold pressure. Drag or use arrow keys to rotate."></canvas></div>
+        <div class="tbl-wrap" id="t3-grid" hidden></div>
+        <div class="ramp" id="ramp"><span id="ramp-lo"></span><i></i><span id="ramp-hi"></span></div>
+        <p class="note" id="t3-note"></p>
+      </section>
+
+      <section class="panel full" aria-labelledby="h-find">
+        <div class="panel-head"><h2 id="h-find">Findings</h2><span class="hint" id="find-sum"></span></div>
+        <h3>All logs</h3>
+        <ul class="findings" id="find-all"></ul>
+        <h3 id="find-run-h">Run A</h3>
+        <ul class="findings" id="find-run"></ul>
+      </section>
+
+      <section class="panel full" id="replay-panel" aria-labelledby="h-replay">
+        <div class="panel-head"><h2 id="h-replay">Replay</h2><span class="hint" id="replay-what"></span></div>
+        <div class="transport">
+          <button class="btn primary" id="play" type="button">Play</button>
+          <button class="btn" id="restart" type="button">Restart</button>
+          <div class="seg" role="group" aria-label="Playback speed">
+            <button type="button" data-speed="0.25" aria-pressed="false">0.25×</button>
+            <button type="button" data-speed="0.5" aria-pressed="false">0.5×</button>
+            <button type="button" data-speed="1" aria-pressed="true">1×</button>
+            <button type="button" data-speed="2" aria-pressed="false">2×</button>
+          </div>
+          <input id="scrub" type="range" min="0" max="1000" step="1" value="0" aria-label="Replay position">
+          <span class="clock" id="clock"></span>
+        </div>
+        <div class="viewbar">
+          <label for="view-sel">View</label>
+          <select id="view-sel"></select>
+          <button class="btn sm" id="view-back" type="button" hidden>Back</button>
+          <button class="btn sm" id="chan-btn" type="button" aria-pressed="false" aria-controls="picker">Channels</button>
+          <input id="view-name" type="text" placeholder="Name this view" aria-label="View name" autocomplete="off">
+          <button class="btn sm" id="view-save" type="button">Save view</button>
+          <button class="btn sm" id="view-del" type="button">Delete view</button>
+          <span class="hint" id="view-msg" role="status" aria-live="polite"></span>
+          <span class="grow"></span>
+          <div class="seg" role="group" aria-label="Trace axis">
+            <button type="button" data-xmode="time" aria-pressed="true">By time</button>
+            <button type="button" data-xmode="rpm" aria-pressed="false">By RPM</button>
+          </div>
+        </div>
+        <div id="picker" hidden>
+          <div class="row">
+            <input id="pick-q" type="search" placeholder="Search channels" aria-label="Search channels" autocomplete="off">
+            <label class="chk"><input id="pick-chg" type="checkbox" checked> Hide channels that never change</label>
+            <span class="hint" id="pick-count"></span>
+          </div>
+          <div id="pick-list"></div>
+        </div>
+        <div class="readouts" id="readouts"></div>
+        <div class="cv-wrap" id="tr-wrap"><canvas id="tr-cv" role="img" aria-label="Logged channels around the selected span"></canvas></div>
+        <p class="note" id="tr-note"></p>
+      </section>
+    </div>
+  </div>
+</div>
+<dialog id="veh-dlg" aria-labelledby="h-veh">
+  <div class="panel-head"><h2 id="h-veh">Vehicle</h2><button class="btn sm primary" id="veh-close" type="button">Done</button></div>
+        <div class="fields">
+          <div class="field wide"><label for="v-model">Model</label><select id="v-model"></select></div>
+          <div class="field"><label for="v-curb">Curb weight, lb</label><input id="v-curb" type="number" min="800" max="9000" step="5"></div>
+          <div class="field"><label for="v-driver">Driver and cargo, lb</label><input id="v-driver" type="number" min="0" max="1500" step="5"></div>
+          <div class="field"><label for="v-tire">Driven tire size</label><input id="v-tire" type="text" autocomplete="off" spellcheck="false"></div>
+          <div class="field"><label for="v-fd">Final drive</label><input id="v-fd" type="number" min="1.5" max="7" step="0.01"></div>
+          <div class="field wide"><label for="v-gears">Gear ratios, 1st first</label><input id="v-gears" type="text" autocomplete="off" spellcheck="false"></div>
+          <div class="field"><label for="v-cd">Drag coefficient</label><input id="v-cd" type="number" min="0.15" max="1" step="0.01"></div>
+          <div class="field"><label for="v-area">Frontal area, ft²</label><input id="v-area" type="number" min="10" max="45" step="0.1"></div>
+          <div class="field wide"><span class="lbl">Road speed from</span>
+            <div class="seg" role="group" aria-label="Road speed source">
+              <button type="button" data-speed-src="ecu" aria-pressed="true">ECU speed channel</button>
+              <button type="button" data-speed-src="gear" aria-pressed="false">Gearing and tire</button>
+            </div>
+          </div>
+        </div>
+        <p class="note" id="veh-sum"></p>
+        <details>
+          <summary>Uncertainty, acceleration fit, rolling resistance, inertia</summary>
+          <div class="fields">
+            <div class="field"><label for="v-unc">Weight uncertainty, ± lb</label><input id="v-unc" type="number" min="0" max="500" step="10"></div>
+            <div class="field"><label for="v-crr">Rolling resistance</label><input id="v-crr" type="number" min="0.005" max="0.03" step="0.001"></div>
+            <div class="field"><label for="v-rot">Wheels and driveline, lb equiv.</label><input id="v-rot" type="number" min="0" max="300" step="2"></div>
+            <div class="field"><label for="v-ie">Engine and flywheel, kg·m²</label><input id="v-ie" type="number" min="0" max="1" step="0.01"></div>
+            <div class="field wide"><label for="v-win">Acceleration fit window: <span id="v-win-out">0.30</span> s each side</label><input id="v-win" type="range" min="0.12" max="0.6" step="0.02"></div>
+          </div>
+        </details>
+        <p class="note">Model fills the fields from a small sample catalog. Every field can be overridden. Changes apply as you type and are saved.</p>
+      </dialog>
+<div id="tip" hidden></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

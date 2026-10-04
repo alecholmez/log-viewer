@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Log Viewer",
+  "version": "0.1.0",
+  "identifier": "io.waypoint.logviewer",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Log Viewer",
+        "width": 1440,
+        "height": 940,
+        "minWidth": 380,
+        "minHeight": 560,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Utility",
+    "shortDescription": "ECU log analysis",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "fileAssociations": [
+      {
+        "ext": ["csv"],
+        "name": "ECU log",
+        "description": "ECU log (CSV)",
+        "contentTypes": ["public.comma-separated-values-text"],
+        "mimeType": "text/csv",
+        "role": "Viewer",
+        "rank": "Alternate"
+      }
+    ],
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    },
+    "iOS": {
+      "minimumSystemVersion": "15.0"
+    }
+  }
+}
