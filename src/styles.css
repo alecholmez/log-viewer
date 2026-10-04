@@ -57,10 +57,13 @@ ol,ul{list-style:none}
 .panel-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;margin-bottom:10px}
 .panel-head .lbl{font-size:12px;color:var(--ink-2)}
 h2{font-family:var(--font-display);font-weight:900;font-size:13px;letter-spacing:.11em;text-transform:uppercase}
-h3{font-size:11.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-2);margin:12px 0 8px}
+h3{font-size:12.5px;font-weight:700;color:var(--ink-2);margin:12px 0 8px}
 .hint{color:var(--ink-2);font-size:12.5px}
+.hint,.note,.fhead,.finding li,.finding .why,.empty p{text-wrap:pretty}
 .meta,.note,.finding li{font-weight:400}
 .btn{font:inherit;font-size:13px;font-weight:400;color:var(--ink);background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:6px 11px;cursor:pointer;line-height:1.2}
+.btn,.seg button,.ab button,.icon-btn,.finding summary{transition:background-color .14s,border-color .14s,color .14s,opacity .14s,transform .14s}
+.btn:active:not(:disabled),.seg button:active,.ab button:active{transform:translateY(1px)}
 .btn:hover{background:var(--inset)}
 .btn.primary{background:var(--ink);color:var(--surface);border-color:var(--ink);font-weight:700}
 .btn.primary:hover{opacity:.88;background:var(--ink)}
@@ -71,6 +74,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,canvas:focus-visib
 .seg{display:inline-flex;border:1px solid var(--rule);border-radius:6px;overflow:hidden}
 .seg button{font:inherit;font-size:12.5px;font-weight:400;color:var(--ink-2);background:var(--surface);border:0;border-left:1px solid var(--rule);padding:5px 10px;cursor:pointer;white-space:nowrap}
 .seg button:first-child{border-left:0}
+.seg button:hover{background:var(--inset);color:var(--ink)}
 .seg button[aria-pressed="true"]{background:var(--ink);color:var(--surface);font-weight:700}
 .seg button:focus-visible{outline-offset:-2px}
 input[type="text"],input[type="number"],input[type="search"],select{font:inherit;font-size:13px;font-variant-numeric:tabular-nums;color:var(--ink);background:var(--inset);border:1px solid var(--rule);border-radius:5px;padding:5px 7px;min-width:0}
@@ -86,6 +90,7 @@ input[type="text"],input[type="number"],input[type="search"],select{font:inherit
 .pull .ttl{font-weight:700;font-size:13px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .ab{display:flex;gap:3px;align-items:center}
 .ab button.r0,.ab button.r1,.ab button.r2{width:26px;height:26px;border-radius:5px;border:1.5px solid var(--rule);background:var(--surface);color:var(--ink-2);font:900 12.5px var(--font-body);cursor:pointer;padding:0}
+.ab button:hover{border-color:var(--ink-2);color:var(--ink)}
 .ab button.r0[aria-pressed="true"]{background:var(--run-a);border-color:var(--run-a);color:#fff}
 .ab button.r1[aria-pressed="true"]{background:var(--run-b);border-color:var(--run-b);color:#fff}
 .ab button.r2[aria-pressed="true"]{background:var(--run-c);border-color:var(--run-c);color:#fff}
@@ -99,6 +104,9 @@ input[type="text"],input[type="number"],input[type="search"],select{font:inherit
 .finding{border:1px solid var(--grid);border-radius:6px;min-width:0;break-inside:avoid;margin-bottom:8px}
 .finding summary{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:9px;align-items:start;padding:9px 10px;cursor:pointer;list-style:none}
 .finding summary::-webkit-details-marker{display:none}
+.finding summary{border-radius:5px}
+.finding summary:hover{background:var(--inset)}
+.finding summary:hover::after{color:var(--ink)}
 .finding summary::after{content:"Details";font-size:12px;color:var(--ink-2);text-decoration:underline;text-underline-offset:2px;white-space:nowrap}
 .finding details[open] summary::after{content:"Hide"}
 .finding details[open] .lead{display:none}
@@ -120,7 +128,7 @@ input[type="text"],input[type="number"],input[type="search"],select{font:inherit
 
 /* vehicle dialog */
 .btn.icon{display:inline-flex;align-items:center;gap:7px}
-dialog{border:1px solid var(--rule);border-radius:10px;background:var(--surface);color:var(--ink);padding:18px;width:min(480px,calc(100vw - 32px));max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);overflow:auto;box-shadow:0 18px 50px rgba(0,0,0,.28)}
+dialog{border:1px solid var(--rule);border-radius:10px;background:var(--surface);color:var(--ink);padding:18px;width:min(480px,calc(100vw - 32px));max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);overflow:auto;box-shadow:0 18px 50px rgb(16 21 28 / .28)}
 dialog::backdrop{background:rgba(8,10,14,.5)}
 .fields{display:grid;grid-template-columns:1fr 1fr;gap:9px 10px}
 .field{display:grid;gap:3px;min-width:0}
@@ -129,6 +137,7 @@ dialog::backdrop{background:rgba(8,10,14,.5)}
 .field input,.field select{width:100%}
 .field input[type="range"]{accent-color:var(--ink);padding:0;border:0;background:none}
 details summary{cursor:pointer;color:var(--ink-2);font-size:12.5px;margin-top:10px}
+dialog details summary:hover{color:var(--ink)}
 details .fields{margin-top:8px}
 .note{color:var(--ink-2);font-size:12.5px;margin-top:8px;max-width:78ch}
 
@@ -148,9 +157,11 @@ details .fields{margin-top:8px}
 .legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--ink-2);margin-bottom:4px}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .cv-wrap{position:relative;width:100%}
-.cv-wrap canvas{display:block;width:100%;height:100%}
+.cv-wrap canvas{position:absolute;inset:0;width:100%;height:100%}
 #dyno-wrap{height:320px}
-#t3-wrap{height:320px}
+/* the table takes the height its panel has left when the power panel beside it is taller */
+#table-panel{display:flex;flex-direction:column}
+#t3-wrap{flex:1 1 320px;min-height:320px}
 #t3-cv{cursor:grab;touch-action:pan-y}
 #t3-cv.dragging{cursor:grabbing}
 #tr-cv{cursor:ew-resize;touch-action:pan-y}
@@ -196,7 +207,7 @@ table{border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:13px}
 .ro .vl{font-family:var(--font-display);font-weight:900;font-size:21px;line-height:1.2;letter-spacing:-.01em;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ro .vl small{font-size:11.5px;font-weight:400;letter-spacing:0;color:var(--ink-2);margin-left:3px}
 
-#tip{position:fixed;z-index:20;pointer-events:none;background:var(--surface);color:var(--ink);border:1px solid var(--rule);border-radius:6px;padding:7px 9px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.14);font-variant-numeric:tabular-nums;max-width:280px}
+#tip{position:fixed;z-index:20;pointer-events:none;background:var(--surface);color:var(--ink);border:1px solid var(--rule);border-radius:6px;padding:7px 9px;font-size:12px;box-shadow:0 4px 14px rgb(16 21 28 / .14);font-variant-numeric:tabular-nums;max-width:280px}
 #tip .th{color:var(--ink-2);margin-bottom:3px}
 #tip .tr{display:flex;align-items:center;gap:10px;justify-content:space-between}
 #tip .tr b{font-weight:700;white-space:nowrap}
@@ -211,7 +222,7 @@ body.dropping .app{outline:2px dashed var(--ink-2);outline-offset:6px;border-rad
   /* one column: the list scrolls in its own box so the charts stay within reach */
   .logs{max-height:44vh;max-height:44dvh;overflow-y:auto;overscroll-behavior:contain;padding-right:2px}
 }
-@media (max-width:480px){ .top h1{font-size:26px} .stat .big{font-size:24px} #dyno-wrap,#t3-wrap{height:280px} .pk{grid-template-columns:minmax(0,1fr) 64px auto auto} }
+@media (max-width:480px){ .top h1{font-size:26px} .stat .big{font-size:24px} #dyno-wrap{height:280px} #t3-wrap{flex-basis:280px;min-height:280px} .pk{grid-template-columns:minmax(0,1fr) 64px auto auto} }
 
 /* logs rail extras */
 .rail-foot{margin-top:12px;padding-top:10px;border-top:1px solid var(--grid);display:grid;gap:6px}

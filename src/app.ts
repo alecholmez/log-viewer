@@ -986,7 +986,9 @@ async function addFiles(files: File[]): Promise<void> {
       await api.loadText(f.name, await f.text());
       added++;
     } catch (e) {
-      errs.push(f.name + ': ' + errText(e));
+      // a refusal that already names the file is shown as it is
+      const why = errText(e);
+      errs.push(why.includes(f.name) ? why : f.name + ': ' + why);
     }
   }
   try {

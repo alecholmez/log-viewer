@@ -63,6 +63,8 @@ try {
   await page.setInputFiles('#file', [logs[0]]);
   await page.waitForFunction(() => /already in the library/.test(document.getElementById('status').textContent));
   check('duplicate log refused', (await page.locator('#logs .log').count()) === 8);
+  const refused = await text(page, 'status');
+  check('the refusal names the file once', refused.split('PCLog_2026-04-17_0136pm.csv').length === 2, refused);
 
   // power chart: default selection and numbers from the core, smoothed at the default level
   const stats = await page.locator('#stats').innerText();
