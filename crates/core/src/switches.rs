@@ -67,7 +67,7 @@ pub struct Row {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Rows {
     pub rows: Vec<Row>,
-    /// switches that change inside the span and were left out by the limit
+    /// signals whose named channel changes inside the span and that were left out by the limit
     pub more: usize,
 }
 

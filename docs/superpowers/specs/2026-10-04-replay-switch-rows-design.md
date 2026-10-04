@@ -1,6 +1,6 @@
 # Replay: switch rows
 
-Status: built, by `docs/superpowers/plans/2026-10-04-replay-switch-rows.md`. Four things were settled while building and are marked "As built" below.
+Status: built, by `docs/superpowers/plans/2026-10-04-replay-switch-rows.md`, then fixed by `docs/superpowers/plans/2026-10-04-switch-rows-fixes.md`. What was settled while building and fixing is marked "As built" below.
 
 ## Why
 
@@ -8,11 +8,11 @@ Many logged channels are switches: clutch, brake, launch control, decel cut, cam
 Drawn as a line graph a switch is a square wave that takes a full trace lane and says little.
 What matters is when it turned on and off during the pull, against the other traces.
 
-In the eight sample logs, 19 on/off channels change at least once and 131 never change. Some are the same signal under several names
-(Clutch State, AVI6 Switch State and Clutch Switch Input State are identical sample for sample).
+In the eight sample logs, 20 channels are switches in at least one log. They are 12 signals: some are the same signal under several names
+(Clutch State, AVI6 Switch State and Clutch Switch Input State).
 
-As built: those three channels read the same through the default pull, but across a whole log they part by one sample at a few changes
-(8.4 s, 26.6 s and 37.7 s of the 1:45 pm log). Channels are therefore compared across the span on screen, not the whole log.
+As built: those three channels are not identical sample for sample. Across a whole log they part by one sample at a few changes
+(8.4 s, 26.6 s and 37.7 s of the 1:45 pm log). Channels are therefore grouped once per log by their changes, allowing one sample between them.
 
 ## What the user sees
 
@@ -21,8 +21,11 @@ Under the traces in the replay, a block of thin rows, one per switch, sharing th
 - A row is a label on the left, a bar across the time axis that is filled while the switch is on, and `On` or `Off` at the playhead on the right.
   (As built: the gutter left of the traces is 46 px, too narrow for a channel name, so the label sits on its own line above the bar, left-aligned, as the trace labels do.)
 - Rows appear on their own. A switch gets a row when it changes inside the time span the replay is showing. A switch that stays on or off for the whole span gets no row.
-- Signals that read the same at every sample of the span on screen and change at the same samples share one row. The row carries the shortest name; the tooltip lists the others.
-  (As built. The design said "identical across the whole log"; see Why.)
+- Channels that are one signal share one row. The row carries the shortest name; the tooltip lists the others.
+  (As built: two switch channels are one signal when they start in the same state, change as often, each pair of corresponding changes
+  goes the same way at most one sample apart, and they are missing at the same samples. A group is every channel linked to another by that
+  rule, worked out once per log. The row's bar, gaps and changes come from the channel with the shortest name alone, and the row appears
+  when that channel changes inside the span. The design said "identical across the whole log"; see Why.)
 - At most 8 rows, in order of first change. If more qualify, the note under the traces says how many are not shown.
 - Pointing at a row draws a thin vertical line through the traces at each of its changes. No other row draws these, so the traces stay clean.
 - A stretch with no samples is left empty, and the readout shows a dash there.
@@ -36,6 +39,10 @@ Decided in the core, from the data, because NSP exports switches as plain number
 
 - Every sample in the whole log that is present is exactly 0 or 1, and both values occur.
 - A channel with any other value, or with one value only, is not a switch.
+- (As built: and the range the log's header declares for the channel, `DisplayMaxMin : max,min`, lies within 0 to 2. NSP declares `1,0` or `2,0`
+  for its switches. O2 Control State declares `524288,0` and Diagnostic ratiometric voltage reference error `4096,-4096`; both read only 0 and 1
+  in the 1:46 pm log and are not switches. A channel with no declared range is decided by its samples. Known limit: Drive By Wire Throttle Motor
+  Direction declares `2,0` and reads 0, 1 and 2 in most logs, so in a log where it reads only 0 and 1 it is a switch.)
 
 ## Out of scope
 
@@ -50,7 +57,7 @@ Numbers come from the core; the UI draws.
   `{ name, also: [names], on: [[start, end], ...], gaps: [[start, end], ...], more }`, times in log seconds, clipped to the span.
   Finding the switch channels and grouping identical ones is done once per log and kept with it.
   (As built: the reply is `{ rows: [{ name, also, on, gaps, changes }], more }`. `more` counts rows, so it sits beside them. `changes` lists the times of the changes,
-  which the UI needs for the lines it draws and cannot work out from spans that were clipped. Finding the switch channels is done once per log; grouping is done per span.)
+  which the UI needs for the lines it draws and cannot work out from spans that were clipped. Finding the switch channels and grouping them are done once per log, and kept with it.)
 - `Session::dispatch` gets a `switches` command with `log`, `t0`, `t1`. `src/api.ts` exposes it.
 - `src/charts.ts`: the trace drawing reserves a band under the last trace and draws the rows with the same x scale. The playhead already spans the canvas.
   The readout at the playhead is found from the spans the core returned; no samples are read in the UI.

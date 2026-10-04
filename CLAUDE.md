@@ -43,7 +43,7 @@ See README.md for layout, commands and log import paths.
   Light is the default theme (owner call 2026-10-04, after seeing a dark-only page). The site follows the system and is light for every visitor; the dark theme stays defined for the app's dark mode.
   The app follows it since 2026-10-04: the system's values sit under the app's existing CSS variable names (`--bg`, `--surface`, `--ink`, `--grid`, `--rule`; `--crit` is the redline), Lato sets titles and figures and Roboto the text (`@fontsource/roboto`), corners are 6, 8 and 12px, panels have no border and sit on one faint shadow, selected controls are pale chips, panel titles and tags are sentence case, and the header's rule ends in the redline.
   The page describes only what has been checked: nothing about AirDrop or iPhone-specific import.
-- Replay: on/off channels are rows under the traces, appearing on their own for any switch that changes in the span on screen. Built from `docs/superpowers/specs/2026-10-04-replay-switch-rows-design.md` by `docs/superpowers/plans/2026-10-04-replay-switch-rows.md`; seen in the browser test, not yet in the native window.
+- Replay: on/off channels are rows under the traces, appearing on their own for any switch that changes in the span on screen. Built from `docs/superpowers/specs/2026-10-04-replay-switch-rows-design.md` by `docs/superpowers/plans/2026-10-04-replay-switch-rows.md`, then fixed by `docs/superpowers/plans/2026-10-04-switch-rows-fixes.md` (issues 1, 3, 5, 6, 7 and 8, core part); seen in the browser test, not yet in the native window.
   The traces and the rows take the stretch of the log they show from `replaySpan` in `src/state.ts`, so a zoom changes one place.
   The website's replay screenshot predates the rows. `npm run site:shots` retakes it; the image gets taller, so its `height` in `site/index.html` must follow.
   Still to design: channels with a small set of states (gear, launch control state, active table). They need value labels the log does not carry, so they stay as traces.
@@ -61,7 +61,7 @@ See README.md for layout, commands and log import paths.
 - Findings are the product. Each one states evidence from the log, why it matters, and numbered changes with values derived from the data. Readers range from tuners to people starting from a base map.
 - NSP unit scaling in `haltech.rs` was inferred from logs, not from Haltech documentation.
 - Other ECUs (Link next) go in a module beside `haltech.rs`; the dyno and tables use only the channel roles in `log.rs`.
-- Switch rows: what is a switch, which channels share a row (they read the same at every sample of the span on screen and change at the same samples), the spans, the order and the limit of eight are decided in `crates/core/src/switches.rs`. `src/charts.ts` draws the spans the core returns and reads no samples for them. Their values are tested in `crates/core/tests/switches.rs`, not in the golden snapshot.
+- Switch rows: what is a switch (samples of 0 and 1, and a declared `DisplayMaxMin` within 0 to 2), which channels are one signal (grouped once per log: same start, same changes each at most one sample apart, missing at the same samples), the spans, the order and the limit of eight are decided in `crates/core/src/switches.rs`. A row is built from the group's shortest name alone. `src/charts.ts` draws the spans the core returns and reads no samples for them. Their values are tested in `crates/core/tests/switches.rs`, not in the golden snapshot.
 
 ## The test car (for sanity checks)
 

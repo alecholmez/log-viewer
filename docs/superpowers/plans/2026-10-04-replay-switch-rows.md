@@ -1,5 +1,8 @@
 # Replay Switch Rows Implementation Plan
 
+> **Amended.** The code this plan gives for `changing` (Task 1) and for `syncSwitches` and the row reads (Task 4) is not what was built: it was changed in review,
+> and again by `docs/superpowers/plans/2026-10-04-switch-rows-fixes.md`, which groups channels once per log and adds the declared range to what is a switch.
+
 > **For agentic workers:** Execute this plan with the owner's `convergence-loop` skill, task by task. Never use superpowers:subagent-driven-development. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Under the replay traces, draw one thin row for each on/off channel that changes in the stretch of the log on screen, sharing the traces' time axis and playhead.

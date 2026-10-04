@@ -155,23 +155,27 @@ export interface DynoOut {
   checks: Finding[];
 }
 
-/** One row of the replay's switch rows: an on/off channel that changes inside the span. Times are log seconds, clipped to the span. */
+/**
+ * One row of the replay's switch rows: a group of on/off channels that are one signal over the whole log, shown because
+ * its named channel changes inside the span. Everything but `also` comes from the named channel alone.
+ * Times are log seconds, clipped to the span.
+ */
 export interface SwitchRow {
-  /** the shortest name among the channels that read the same and change together across the span */
+  /** the channel the row is built from: the shortest name in its group */
   name: string;
-  /** the other channels that read the same and change together across the span, shortest name first */
+  /** the other channels in the group, shortest name first; their changes can be a sample off the named channel's */
   also: string[];
-  /** [start, end] while the switch is on */
+  /** [start, end] while the named channel is on; one that starts on the last sample of the span has no length */
   on: [number, number][];
-  /** [start, end] with no samples */
+  /** [start, end] where the named channel has no samples */
   gaps: [number, number][];
-  /** when the switch changes */
+  /** when the named channel changes */
   changes: number[];
 }
 
 export interface Switches {
   rows: SwitchRow[];
-  /** switches that change inside the span and were left out by the core's row limit (`MAX_ROWS` in `switches.rs`) */
+  /** signals whose named channel changes inside the span and that were left out by the core's row limit (`MAX_ROWS` in `switches.rs`) */
   more: number;
 }
 
