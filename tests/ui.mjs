@@ -701,9 +701,12 @@ try {
           return ns.map(n => s.getPropertyValue(n).trim()).join();
         }, names);
       const bySystem = await read();
+      // with the system light, only the attribute block can supply the dark values
+      await page.emulateMedia({ colorScheme: 'light' });
       await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
       const byAttribute = await read();
       await page.evaluate(() => delete document.documentElement.dataset.theme);
+      await page.emulateMedia({ colorScheme: 'dark' });
       check(
         'both dark theme blocks carry the same tokens',
         bySystem === byAttribute && bySystem === '#8b8e96,#8b8e96,#3987e5,#199e70,#060606,#060606,#fab219',
