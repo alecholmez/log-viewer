@@ -13,6 +13,7 @@ use crate::findings::{analyze_logs, check_pull, Finding};
 use crate::haltech::{parse_nsp_csv, type_info, Col, BAD};
 use crate::log::Log;
 use crate::stats::median;
+use crate::switches::{switches, MAX_ROWS};
 use crate::table::{axes, bin_table, Table};
 
 pub enum Reply {
@@ -124,6 +125,12 @@ fn arg_str<'a>(args: &'a Value, key: &str) -> Result<&'a str, String> {
         .ok_or_else(|| format!("missing argument: {key}"))
 }
 
+fn arg_f64(args: &Value, key: &str) -> Result<f64, String> {
+    args.get(key)
+        .and_then(Value::as_f64)
+        .ok_or_else(|| format!("missing argument: {key}"))
+}
+
 impl Session {
     /// A session that keeps nothing on disk.
     pub fn memory() -> Session {
@@ -164,6 +171,13 @@ impl Session {
 
     pub fn logs(&self) -> &[Log] {
         &self.logs
+    }
+
+    fn log(&self, key: &str) -> Result<&Log, String> {
+        self.logs
+            .iter()
+            .find(|l| l.key == key)
+            .ok_or_else(|| "That log is not loaded.".to_string())
     }
 
     fn refresh(&mut self) {
@@ -254,12 +268,7 @@ impl Session {
     }
 
     fn remove(&mut self, key: &str) -> Result<(), String> {
-        let name = self
-            .logs
-            .iter()
-            .find(|l| l.key == key)
-            .map(|l| l.name.clone())
-            .ok_or("That log is not loaded.")?;
+        let name = self.log(key)?.name.clone();
         self.forget(key);
         if let Some(dir) = &self.dir {
             let _ = fs::remove_file(dir.join("logs").join(&name));
@@ -429,12 +438,7 @@ impl Session {
             )
             .map_err(|e| e.to_string())?),
             "log_data" => {
-                let key = arg_str(&args, "key")?;
-                let log = self
-                    .logs
-                    .iter()
-                    .find(|l| l.key == key)
-                    .ok_or("That log is not loaded.")?;
+                let log = self.log(arg_str(&args, "key")?)?;
                 Ok(Reply::Bytes(Self::data(log)))
             }
             "load_text" => {
@@ -454,6 +458,12 @@ impl Session {
                 let a: DynoArgs =
                     serde_json::from_value(args).map_err(|e| format!("bad dyno arguments: {e}"))?;
                 ok(serde_json::to_value(self.dyno(&a.vehicle, &a.runs))
+                    .map_err(|e| e.to_string())?)
+            }
+            "switches" => {
+                let log = self.log(arg_str(&args, "log")?)?;
+                let (t0, t1) = (arg_f64(&args, "t0")?, arg_f64(&args, "t1")?);
+                ok(serde_json::to_value(switches(log, t0, t1, MAX_ROWS))
                     .map_err(|e| e.to_string())?)
             }
             "get_settings" => {

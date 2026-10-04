@@ -155,6 +155,26 @@ export interface DynoOut {
   checks: Finding[];
 }
 
+/** One row of the replay's switch rows: an on/off channel that changes inside the span. Times are log seconds, clipped to the span. */
+export interface SwitchRow {
+  /** the shortest name among the channels that read the same across the span */
+  name: string;
+  /** the other channels that read the same across the span */
+  also: string[];
+  /** [start, end] while the switch is on */
+  on: [number, number][];
+  /** [start, end] with no samples */
+  gaps: [number, number][];
+  /** when the switch changes */
+  changes: number[];
+}
+
+export interface Switches {
+  rows: SwitchRow[];
+  /** switches that change inside the span and were left out by the core's limit of eight rows */
+  more: number;
+}
+
 /** Vehicle in SI units, as the core wants it. */
 export interface Vehicle {
   mass: number;
