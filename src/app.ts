@@ -39,6 +39,7 @@ import {
   resetTheme,
   series,
   showTip,
+  switchKey,
   theme,
 } from './state';
 import type { TipRow } from './state';
@@ -944,18 +945,20 @@ let swSeq = 0;
 function syncSwitches(): void {
   const f = S.focus;
   const span = f && S.swShow ? replaySpan(f) : null;
-  const key = f && span ? [f.log.key, ...span].join('|') : '';
+  const key = f && span ? switchKey(f) : '';
   if (key === swKey) return;
   swKey = key;
   const seq = ++swSeq;
   // rows for another span must not be drawn against this one while the new rows are on their way
   S.sw = null;
+  S.swFor = '';
   S.rev++;
   if (!f || !span) return;
   api.switches(f.log.key, span[0], span[1]).then(
     rows => {
       if (seq !== swSeq) return;
       S.sw = rows;
+      S.swFor = key;
       S.rev++;
       drawAll();
     },

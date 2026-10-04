@@ -1,9 +1,27 @@
 // Canvas drawing: the power chart, the replay traces and the 3D table.
 
 import { atRpm, clamp, curveAtTime, idxAt, quant, valAt } from './data';
-import { $, RUN, S, chInfo, css, curTable, curView, fmt, hideTip, mix, niceStep, prep, replaySpan, series, showTip, theme } from './state';
+import {
+  $,
+  RUN,
+  S,
+  chInfo,
+  css,
+  curTable,
+  curView,
+  fmt,
+  hideTip,
+  mix,
+  niceStep,
+  prep,
+  replaySpan,
+  series,
+  showTip,
+  switchKey,
+  theme,
+} from './state';
 import type { Cell, ChInfo, RGB, TipRow } from './state';
-import type { Log, Pt, Pull, SwitchRow, Table, TraceDef } from './types';
+import type { Log, Pt, Pull, SwitchRow, Switches, Table, TraceDef } from './types';
 
 const TAU = 6.2832;
 
@@ -261,7 +279,9 @@ export const dropTraceCache = () => {
 };
 
 /** The switch rows to draw. By RPM has none: a switch against engine speed is not a timeline. */
-const switchRows = (): SwitchRow[] => (S.xmode === 'time' && S.sw ? S.sw.rows : []);
+const switchRows = (): SwitchRow[] => (S.xmode === 'time' ? (shownSwitches()?.rows ?? []) : []);
+/** The rows in S.sw, only when they are for the log and span on screen. Everything that draws or reads rows goes through here. */
+const shownSwitches = (): Switches | null => (S.sw && S.focus && S.swFor === switchKey(S.focus) ? S.sw : null);
 const swHeight = (rows: number) => (rows ? SW.top + rows * SW_PITCH : 0);
 /** y of the top of row k's bar. */
 const swBarY = (L: TraceLayout, k: number) => L.swY + SW.top + k * SW_PITCH + SW.lab;
@@ -274,7 +294,7 @@ export function switchAt(row: SwitchRow, t: number): 'On' | 'Off' | '–' {
 
 /** What the note under the traces says about the switch rows. */
 function switchNote(rpmMode: boolean): string {
-  const sw = S.sw;
+  const sw = shownSwitches();
   if (!sw) return '';
   if (rpmMode) return sw.rows.length ? ' By RPM hides the switch rows.' : '';
   if (!sw.more) return '';
@@ -544,7 +564,7 @@ export function drawTraces(): void {
       const marks: { log?: Log; at?: number; sev?: string }[] = [...S.runFindings];
       for (const g of S.findings) marks.push(...(g.occurrences || [g]));
       for (const g of marks) {
-        if (g.log !== f.log || g.at === undefined || g.at < f.w0 || g.at > f.w1) continue;
+        if (g.log !== f.log || g.at === undefined || g.at < L.x0 || g.at > L.x1) continue;
         if (g.sev && g.sev !== 'warn' && g.sev !== 'crit') continue;
         const x = L.X(g.at);
         c.fillStyle = g.sev === 'warn' ? th.warn : th.crit;

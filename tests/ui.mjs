@@ -258,28 +258,35 @@ try {
   await page.locator('.log-head', { hasText: '1:42 pm log' }).locator('button', { hasText: 'Replay' }).click();
   await settle(page);
   const bare = await replay(page);
+  // the core's own (empty) answer for this span says which span rows are for; hand-made rows are put in for that span
+  await until(page, () => window.__logViewer.swFor !== '');
+  const realFor = await page.evaluate(() => window.__logViewer.swFor);
   const putRows = more =>
-    page.evaluate(more => {
-      const s = window.__logViewer;
-      s.sw = {
-        rows: [
-          {
-            name: 'Clutch',
-            also: ['Clutch Input'],
-            // the second on span is 10 ms of an 18 s span: less than a pixel wide
-            on: [
-              [4, 8],
-              [14, 14.01],
-            ],
-            gaps: [[10, 12]],
-            changes: [4, 8, 14, 14.01],
-          },
-          { name: 'Fan', also: [], on: [[0, s.focus.w1]], gaps: [], changes: [] },
-        ],
-        more,
-      };
-      s.rev++;
-    }, more);
+    page.evaluate(
+      ([more, realFor]) => {
+        const s = window.__logViewer;
+        s.sw = {
+          rows: [
+            {
+              name: 'Clutch',
+              also: ['Clutch Input'],
+              // the second on span is 10 ms of an 18 s span: less than a pixel wide
+              on: [
+                [4, 8],
+                [14, 14.01],
+              ],
+              gaps: [[10, 12]],
+              changes: [4, 8, 14, 14.01],
+            },
+            { name: 'Fan', also: [], on: [[0, s.focus.w1]], gaps: [], changes: [] },
+          ],
+          more,
+        };
+        s.swFor = realFor; // the rows are for the span on screen
+        s.rev++;
+      },
+      [more, realFor],
+    );
   await putRows(2);
   const read = [await playhead(page, 2), await playhead(page, 6), await playhead(page, 11)].join(' | ');
   check('a switch row reads On, Off, or a dash where there are no samples', read === 'Off,On | On,On | –,On', read);
@@ -396,6 +403,27 @@ try {
     whole.more === 3 && / 3 more switches change in this span and are not shown\.$/.test(whole.note),
     whole.more + ' ' + whole.note,
   );
+
+  // while the dyno call for a new run A is on its way, a hover redraws the traces: rows of the old span must not appear
+  let release;
+  const gate = new Promise(r => (release = r));
+  // the core's answer for the new span is held too, so only rows of the old span could be on screen
+  await page.route(/\/api\/(dyno|switches)$/, async route => {
+    await gate;
+    await route.continue().catch(() => {}); // unrouting below may have let it through already
+  });
+  await page.locator('.pull', { hasText: '3rd gear · 2,974' }).locator('button.r0').click();
+  await page.hover('#tr-cv', { position: { x: 120, y: 20 } });
+  await page.mouse.move(130, 30);
+  const mid = await replay(page);
+  check(
+    'rows of the previous span are not drawn while the new run is loading',
+    (mid.rows?.length ?? 0) === 0 && mid.now === '' && mid.height === bare.height,
+    JSON.stringify([mid.rows?.length, mid.now, mid.height]),
+  );
+  release();
+  await page.unroute(/\/api\/(dyno|switches)$/);
+  await page.waitForTimeout(600);
 
   // an answer that arrives after the user has moved to another span must not be drawn against that span
   let held = 0;
