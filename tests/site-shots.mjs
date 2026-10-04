@@ -3,7 +3,7 @@
 //   npm run build && cargo build --release -p logviewer-dev && npm run site:shots
 //
 // Writes site/img/<name>.webp at twice the size the page shows them, and site/og.png, the link preview.
-// The website is dark for every visitor, so the app is photographed in its dark theme.
+// The website is light for every visitor, so the app is photographed in its light theme.
 // Prints each image's size in CSS pixels; the width and height attributes in site/index.html must match.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -34,7 +34,7 @@ let browser;
 try {
   browser = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
   {
-    const page = await browser.newPage({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: 2, colorScheme: 'dark' });
+    const page = await browser.newPage({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: 2, colorScheme: 'light' });
     await page.goto(url);
     await libraryOpen(page);
     if ((await page.locator('#logs .log').count()) === 0) {
