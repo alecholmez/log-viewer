@@ -348,20 +348,15 @@ function renderLogs(): void {
       const t2 = el('div');
       const pt = el('div', 'ttl', pullName(p));
       t2.appendChild(pt);
-      const meta = el(
-        'div',
-        'meta',
-        (S.names.pulls[p.key] ? pullDefault(p) + ' · ' : '') +
-          'at ' +
-          p.t0.toFixed(1) +
-          ' s · ' +
-          p.dur.toFixed(1) +
-          ' s · accelerator ' +
-          fmt(p.peakPedal) +
-          '% · ' +
-          fmt(p.peakMap) +
-          ' kPa ',
-      );
+      // no-break spaces: a value never parts from its unit, and a separator never starts a line
+      const nb = '\u00a0';
+      const facts = [
+        'at' + nb + p.t0.toFixed(1) + nb + 's',
+        p.dur.toFixed(1) + nb + 's',
+        'accelerator' + nb + fmt(p.peakPedal) + '%',
+        fmt(p.peakMap) + nb + 'kPa',
+      ];
+      const meta = el('div', 'meta', (S.names.pulls[p.key] ? pullDefault(p) + ' · ' : '') + facts.join(nb + '· ') + ' ');
       t2.appendChild(meta);
       const ab = el('div', 'ab');
       RUN.forEach((nm, i) => {
