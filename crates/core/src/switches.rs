@@ -1,8 +1,16 @@
 //! Switch rows for the replay: on/off channels as bars on the time axis.
 //!
-//! NSP exports a switch as a plain number with no type that marks it, so a switch is found from its samples:
-//! every sample that is present is exactly 0 or 1, and both occur. Which channels are switches is worked out
-//! once per log and kept with it. Which of them change, and which read the same and change together, is answered for a span.
+//! NSP exports a switch as a plain number with no type that marks it, so a switch is found from its samples and the
+//! log's header: every sample that is present is exactly 0 or 1, both occur, and the range the header declares for the
+//! channel, if it declares one, lies within 0 to 2.
+//!
+//! The same signal is often logged under several names. Two switch channels are one signal when they start in the same
+//! state, change as often, each pair of corresponding changes goes the same way at most one sample apart, and they are
+//! missing at the same samples. A group is every channel linked to another by that rule, so it never depends on channel
+//! order. Which channels are switches, and their groups, are worked out once per log and kept with it.
+//!
+//! A group's row is built from one channel alone, the member with the shortest name. It appears for a span when that
+//! channel changes inside the span.
 
 use std::ops::Range;
 
@@ -30,18 +38,29 @@ pub struct Switch {
     gaps: Vec<[f64; 2]>,
 }
 
-/// One row of the replay: a switch that changes inside the span.
+/// The switch channels of a log that are one signal, and the channel their row is built from.
+#[derive(Clone, Debug)]
+pub struct Group {
+    /// the member with the shortest name, ties broken by name order
+    switch: Switch,
+    name: String,
+    /// the other members, shortest name first
+    also: Vec<String>,
+}
+
+/// One row of the replay: a group whose named channel changes inside the span. Built from that channel alone.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Row {
-    /// the shortest name among the channels that read the same and change together across the span
+    /// the channel the row is built from: the shortest name in its group, ties broken by name order
     pub name: String,
-    /// the other channels that read the same and change together across the span, shortest name first
+    /// the other channels in its group, shortest name first. Their changes can be a sample off the named channel's.
     pub also: Vec<String>,
-    /// [start, end] in log seconds while the switch is on, clipped to the span
+    /// [start, end] in log seconds while the named channel is on, clipped to the span.
+    /// One that starts on the last sample of the span has no length.
     pub on: Vec<[f64; 2]>,
-    /// [start, end] in log seconds with no samples, clipped to the span
+    /// [start, end] in log seconds where the named channel has no samples, clipped to the span
     pub gaps: Vec<[f64; 2]>,
-    /// log seconds of every change inside the span
+    /// log seconds of every change of the named channel inside the span
     pub changes: Vec<f64>,
 }
 
@@ -120,21 +139,67 @@ fn trace(j: usize, t: &[f64], a: &[f64]) -> Switch {
     sw
 }
 
-/// Every switch channel of the log, in channel order. Found on first use and kept with the log.
-fn all(log: &Log) -> &[Switch] {
-    log.switches.get_or_init(|| {
-        (0..log.names.len())
-            .filter(|&j| !log.is_const(j) && is_switch(log.chan_at(j), log.ranges[j]))
-            .map(|j| trace(j, &log.t, log.chan_at(j)))
-            .collect()
-    })
+/// The first reading that is present.
+fn first_reading(a: &[f64]) -> f64 {
+    a.iter().copied().find(|v| !v.is_nan()).unwrap_or(f64::NAN)
 }
 
-/// The same reading at every sample. A missing sample matches a missing sample: NaN is not equal to itself.
-fn same(a: &[f64], b: &[f64]) -> bool {
-    a.iter()
-        .zip(b)
-        .all(|(x, y)| x == y || (x.is_nan() && y.is_nan()))
+/// Two switch channels are one signal: they are missing at the same samples, start in the same state, change as often,
+/// and each pair of corresponding changes goes the same way at most one sample apart.
+fn same_signal(a: &Switch, ra: &[f64], b: &Switch, rb: &[f64]) -> bool {
+    ra.iter().zip(rb).all(|(x, y)| x.is_nan() == y.is_nan())
+        && first_reading(ra) == first_reading(rb)
+        && a.changes.len() == b.changes.len()
+        && (a.changes.iter().zip(&b.changes)).all(|(&i, &k)| i.abs_diff(k) <= 1 && ra[i] == rb[k])
+}
+
+/// The switches that are one signal, as indexes into `switches`: every switch linked to another by `same_signal`,
+/// directly or through others. Groups come in order of their first member.
+fn group(log: &Log, switches: &[Switch]) -> Vec<Vec<usize>> {
+    let readings = |i: usize| log.chan_at(switches[i].j);
+    // the group of each switch, named by its first member
+    let mut label: Vec<usize> = (0..switches.len()).collect();
+    for i in 0..switches.len() {
+        for k in i + 1..switches.len() {
+            if label[i] != label[k]
+                && same_signal(&switches[i], readings(i), &switches[k], readings(k))
+            {
+                let (keep, gone) = (label[i].min(label[k]), label[i].max(label[k]));
+                label
+                    .iter_mut()
+                    .filter(|l| **l == gone)
+                    .for_each(|l| *l = keep);
+            }
+        }
+    }
+    (0..switches.len())
+        .filter(|&g| label[g] == g)
+        .map(|g| (0..switches.len()).filter(|&i| label[i] == g).collect())
+        .collect()
+}
+
+/// Every group of switch channels in the log. Found on first use and kept with the log.
+fn all(log: &Log) -> &[Group] {
+    log.switches.get_or_init(|| {
+        let switches: Vec<Switch> = (0..log.names.len())
+            .filter(|&j| !log.is_const(j) && is_switch(log.chan_at(j), log.ranges[j]))
+            .map(|j| trace(j, &log.t, log.chan_at(j)))
+            .collect();
+        group(log, &switches)
+            .into_iter()
+            .map(|members| {
+                let mut named: Vec<(&str, usize)> = (members.iter())
+                    .map(|&i| (log.names[switches[i].j].as_str(), i))
+                    .collect();
+                named.sort_by_key(|&(name, _)| (name.chars().count(), name));
+                Group {
+                    switch: switches[named[0].1].clone(),
+                    name: named[0].0.to_string(),
+                    also: named[1..].iter().map(|(n, _)| n.to_string()).collect(),
+                }
+            })
+            .collect()
+    })
 }
 
 /// The span asked for, in log seconds, both ends included.
@@ -173,52 +238,34 @@ impl Span {
     }
 }
 
-/// A switch that changes inside the span, with every channel that reads the same and changes at the same
-/// samples there. All of them agree on `changes`, `on` and `gaps`, so it does not matter which one is kept.
+/// A group whose named channel changes inside the span.
 struct Found<'a> {
-    /// sample indexes of its changes inside the span, never empty
+    group: &'a Group,
+    /// sample indexes of the named channel's changes inside the span, never empty
     changes: Vec<usize>,
-    switch: &'a Switch,
-    /// the channels that share this row, shortest name first
-    names: Vec<&'a str>,
 }
 
-/// The switches that change at the samples `inside`, in order of first change. Channels that read the same and
-/// change at the same samples there are one entry. A change on the first sample of the span counts.
+/// The groups whose named channel changes at the samples `inside`, in order of its first change there.
+/// A change on the first sample of the span counts.
 fn changing<'a>(log: &'a Log, inside: &Range<usize>) -> Vec<Found<'a>> {
-    let readings = |s: &Switch| &log.chan_at(s.j)[inside.clone()];
-    let mut found: Vec<Found> = Vec::new();
-    for switch in all(log) {
-        let changes: Vec<usize> = (switch.changes.iter())
-            .copied()
-            .filter(|i| inside.contains(i))
-            .collect();
-        if changes.is_empty() {
-            continue;
-        }
-        let name = log.names[switch.j].as_str();
-        match found
-            .iter_mut()
-            .find(|f| f.changes == changes && same(readings(f.switch), readings(switch)))
-        {
-            Some(f) => f.names.push(name),
-            None => found.push(Found {
-                changes,
-                switch,
-                names: vec![name],
-            }),
-        }
-    }
-    for f in &mut found {
-        f.names.sort_by_key(|n| (n.chars().count(), *n));
-    }
-    // switches that first change at the same sample are in name order, so the order never depends on channel order
-    found.sort_by(|a, b| (a.changes[0].cmp(&b.changes[0])).then(a.names[0].cmp(b.names[0])));
+    let mut found: Vec<Found> = (all(log).iter())
+        .filter_map(|group| {
+            let changes: Vec<usize> = (group.switch.changes.iter())
+                .copied()
+                .filter(|i| inside.contains(i))
+                .collect();
+            (!changes.is_empty()).then_some(Found { group, changes })
+        })
+        .collect();
+    // rows that first change at the same sample are in name order, so the order never depends on channel order
+    found.sort_by(|a, b| {
+        (a.changes[0].cmp(&b.changes[0])).then_with(|| a.group.name.cmp(&b.group.name))
+    });
     found
 }
 
 /// The switches that change between `t0` and `t1` (log seconds, both ends included), in order of first change,
-/// at most `limit` of them. Channels that read the same and change at the same samples of the span share one row.
+/// at most `limit` of them. Each group of channels that are one signal has one row, built from its named channel.
 pub fn switches(log: &Log, t0: f64, t1: f64, limit: usize) -> Rows {
     // also true when either end is NaN
     if !(t0 <= t1) {
@@ -235,10 +282,10 @@ pub fn switches(log: &Log, t0: f64, t1: f64, limit: usize) -> Rows {
         .into_iter()
         .take(limit)
         .map(|f| Row {
-            name: f.names[0].to_string(),
-            also: f.names[1..].iter().map(|n| n.to_string()).collect(),
-            on: span.clip(&f.switch.on),
-            gaps: span.clip(&f.switch.gaps),
+            name: f.group.name.clone(),
+            also: f.group.also.clone(),
+            on: span.clip(&f.group.switch.on),
+            gaps: span.clip(&f.group.switch.gaps),
             changes: f.changes.iter().map(|&i| span.snap(log.t[i])).collect(),
         })
         .collect();
@@ -448,10 +495,10 @@ mod tests {
         assert_eq!(r.rows[0].also, ["Fan Output State"]);
     }
 
-    /// The sample logs hold the clutch under three names that part by one sample here and there.
-    /// Inside a span where they read the same they are one row; across a span where they part they are not.
+    /// Channels are grouped once, across the whole log. Two that read the same inside a span but change a different
+    /// number of times over the log are two signals in every span.
     #[test]
-    fn channels_are_compared_across_the_span_not_the_whole_log() {
+    fn channels_that_part_anywhere_in_the_log_are_two_rows_in_every_span() {
         let l = log(&[
             ("Clutch State", &[0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0]),
             (
@@ -460,9 +507,141 @@ mod tests {
             ),
         ]);
         let r = switches(&l, 3.0, 7.0, MAX_ROWS);
-        assert_eq!(names(&r), ["Clutch State"]);
-        assert_eq!(r.rows[0].also, ["AVI6 Switch State"]);
+        assert_eq!(names(&r), ["AVI6 Switch State", "Clutch State"]);
+        assert_eq!(r.rows[0].also, Vec::<String>::new());
+        assert_eq!(r.rows[1].also, Vec::<String>::new());
         assert_eq!(names(&whole(&l)), ["Clutch State", "AVI6 Switch State"]);
+    }
+
+    /// The sample logs hold the clutch under three names whose changes part by one sample here and there.
+    #[test]
+    fn channels_whose_changes_are_at_most_one_sample_apart_are_one_signal() {
+        let l = log(&[
+            (
+                "AVI6 Switch State",
+                &[0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0],
+            ),
+            ("Clutch State", &[0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0]),
+        ]);
+        let r = whole(&l);
+        // the row is the shorter name's, and its spans and changes are that channel's alone
+        assert_eq!(
+            r.rows,
+            [Row {
+                name: "Clutch State".into(),
+                also: vec!["AVI6 Switch State".into()],
+                on: vec![[1.0, 3.0], [5.0, 7.0]],
+                gaps: vec![],
+                changes: vec![1.0, 3.0, 5.0, 7.0],
+            }]
+        );
+        let r = switches(&l, 2.0, 4.0, MAX_ROWS);
+        assert_eq!(names(&r), ["Clutch State"]);
+        assert_eq!(r.rows[0].on, [[2.0, 3.0]]);
+        assert_eq!(r.rows[0].changes, [3.0]);
+    }
+
+    /// A row appears for a span when the channel it is built from changes there, whatever the others in its group do.
+    #[test]
+    fn a_row_appears_only_when_its_named_channel_changes() {
+        let l = log(&[
+            (
+                "AVI6 Switch State",
+                &[0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0],
+            ),
+            ("Clutch State", &[0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0]),
+        ]);
+        // only AVI6 Switch State changes at 4 s
+        assert_eq!(switches(&l, 3.5, 4.5, MAX_ROWS).rows, vec![]);
+    }
+
+    #[test]
+    fn channels_that_start_apart_change_apart_or_change_more_are_two_signals() {
+        #[rustfmt::skip]
+        let l = log(&[
+            // changes two samples after "Two apart"
+            ("Two apart",    &[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            ("Two later",    &[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            // changes when "Fan" does, but starts on
+            ("Fan",          &[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0]),
+            ("Fan inverted", &[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]),
+            // changes once more than "Pump"
+            ("Pump",         &[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0]),
+            ("Pump twice",   &[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0]),
+        ]);
+        let r = whole(&l);
+        assert_eq!(
+            names(&r),
+            [
+                "Two apart",
+                "Two later",
+                "Fan",
+                "Fan inverted",
+                "Pump",
+                "Pump twice"
+            ]
+        );
+        assert!(r.rows.iter().all(|row| row.also.is_empty()));
+    }
+
+    /// A is one sample from B and B one from C, so all three are one signal, though A and C are two samples apart.
+    #[test]
+    fn grouping_is_transitive_and_does_not_depend_on_channel_order() {
+        let a: (&str, &[f64]) = (
+            "Fan Output State",
+            &[0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+        );
+        let b: (&str, &[f64]) = (
+            "Fan State",
+            &[0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0],
+        );
+        let c: (&str, &[f64]) = ("Fan", &[0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0]);
+        let want = Rows {
+            rows: vec![Row {
+                name: "Fan".into(),
+                also: vec!["Fan State".into(), "Fan Output State".into()],
+                on: vec![[4.0, 8.0]],
+                gaps: vec![],
+                changes: vec![4.0, 8.0],
+            }],
+            more: 0,
+        };
+        for order in [
+            [a, b, c],
+            [a, c, b],
+            [b, a, c],
+            [b, c, a],
+            [c, a, b],
+            [c, b, a],
+        ] {
+            assert_eq!(whole(&log(&order)), want, "{:?}", order.map(|ch| ch.0));
+        }
+    }
+
+    /// Two channels missing at different samples are two signals, so neither row depends on which channel comes first.
+    #[test]
+    fn channels_missing_at_different_samples_are_two_rows_in_either_order() {
+        let a: (&str, &[f64]) = ("A", &[1.0, X, X, 1.0, 0.0]);
+        let b: (&str, &[f64]) = ("B", &[X, X, X, 1.0, 0.0]);
+        let ab = switches(&log(&[a, b]), 0.5, 4.0, MAX_ROWS);
+        assert_eq!(ab, switches(&log(&[b, a]), 0.5, 4.0, MAX_ROWS));
+        assert_eq!(names(&ab), ["A", "B"]);
+        assert_eq!(
+            (ab.rows[0].on.clone(), ab.rows[0].gaps.clone()),
+            (vec![[0.5, 4.0]], vec![[1.0, 3.0]])
+        );
+        assert_eq!(
+            (ab.rows[1].on.clone(), ab.rows[1].gaps.clone()),
+            (vec![[3.0, 4.0]], vec![[0.5, 3.0]])
+        );
+
+        let c: (&str, &[f64]) = ("C", &[0.0, 1.0, X, 1.0, 1.0, 0.0]);
+        let d: (&str, &[f64]) = ("D", &[0.0, 1.0, 1.0, 1.0, 1.0, 0.0]);
+        let cd = switches(&log(&[c, d]), 2.5, 5.0, MAX_ROWS);
+        assert_eq!(cd, switches(&log(&[d, c]), 2.5, 5.0, MAX_ROWS));
+        assert_eq!(names(&cd), ["C", "D"]);
+        assert_eq!(cd.rows[0].gaps, [[2.5, 3.0]]);
+        assert_eq!(cd.rows[1].gaps, Vec::<[f64; 2]>::new());
     }
 
     #[test]
@@ -540,11 +719,12 @@ mod tests {
 
     #[test]
     fn rows_come_in_order_of_first_change_and_stop_at_the_limit() {
-        // ten switches, each on for one second; the higher the number, the earlier it changes
+        // ten switches, each on for one second, two seconds apart so that no two are one signal;
+        // the higher the number, the earlier it changes
         let series: Vec<(String, Vec<f64>)> = (0..10)
             .map(|k| {
-                let mut v = vec![0.0; 14];
-                v[11 - k] = 1.0;
+                let mut v = vec![0.0; 24];
+                v[22 - 2 * k] = 1.0;
                 (format!("Switch {k}"), v)
             })
             .collect();
@@ -564,7 +744,7 @@ mod tests {
         );
         assert_eq!(r.more, 2);
 
-        let r = switches(&l, 0.0, 13.0, 3);
+        let r = switches(&l, 0.0, 23.0, 3);
         assert_eq!(names(&r), ["Switch 9", "Switch 8", "Switch 7"]);
         assert_eq!(r.more, 7);
     }
@@ -590,9 +770,10 @@ mod tests {
 
     #[test]
     fn switches_that_first_change_together_are_ordered_by_name() {
+        // their second changes are two samples apart, so they are two signals
         let l = log(&[
-            ("Decel", &[0.0, 1.0, 1.0, 0.0]),
-            ("Brake", &[0.0, 1.0, 0.0, 0.0]),
+            ("Decel", &[0.0, 1.0, 1.0, 1.0, 0.0]),
+            ("Brake", &[0.0, 1.0, 0.0, 0.0, 0.0]),
         ]);
         assert_eq!(names(&whole(&l)), ["Brake", "Decel"]);
     }

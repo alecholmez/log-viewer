@@ -395,13 +395,18 @@ try {
       (narrow.rows || []).map(r => r.name).join() === 'Stepper 1 Pin 2 Output State,Predicted MAP Active',
     JSON.stringify([asked.length, asked[2], (narrow.rows || []).map(r => r.name)]),
   );
+  // across the whole log the clutch channels part by a sample at a few changes; they are still one row
   await page.locator('.log-head', { hasText: 'Back road' }).locator('button', { hasText: 'Replay' }).click();
   await rowsShown(page, 8);
   const whole = await replay(page);
+  const wholeNames = (whole.rows || []).map(r => r.name).join();
   check(
-    'a whole log shows eight rows and counts the rest',
-    whole.more === 3 && / 3 more switches change in this span and are not shown\.$/.test(whole.note),
-    whole.more + ' ' + whole.note,
+    'a whole log shows the clutch once among its eight rows, and no note when none is left out',
+    wholeNames ===
+      'Stepper 1 Pin 2 Output State,Predicted MAP Active,Drive By Wire 1 Pin 1 Output State,Clutch State,Decel Detected,Gear Upshift State,AVI1 Switch State,Brake Pedal State' &&
+      whole.more === 0 &&
+      !/ more switch/.test(whole.note),
+    wholeNames + ' ' + whole.more + ' ' + whole.note,
   );
 
   // while the dyno call for a new run A is on its way, a hover redraws the traces: rows of the old span must not appear

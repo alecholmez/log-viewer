@@ -118,10 +118,10 @@ fn clutch_state_carries_its_two_duplicates() {
     );
 }
 
-/// Across the whole of the same log the three clutch channels part by one sample (at 8.4 s, 26.6 s and 37.7 s),
-/// so they are three rows there, and more switches change than the replay has rows for.
+/// Across the whole of the same log the three clutch channels part by one sample at a few changes
+/// (8.4 s, 26.6 s and 37.7 s). Their changes are never more than a sample apart, so they are one row there too.
 #[test]
-fn a_whole_log_is_cut_at_eight_rows_and_says_how_many_are_left_out() {
+fn across_the_whole_1_45_pm_log_the_clutch_is_one_row() {
     let Some(mut s) = sample_session() else {
         return;
     };
@@ -130,20 +130,102 @@ fn a_whole_log_is_cut_at_eight_rows_and_says_how_many_are_left_out() {
     assert_eq!(
         names(&reply),
         [
-            "Cam Control Switched Output State Intake",
             "Stepper 1 Pin 2 Output State",
             "Predicted MAP Active",
             "Drive By Wire 1 Pin 1 Output State",
-            "AVI6 Switch State",
             "Clutch State",
-            "Clutch Switch Input State",
             "Decel Detected",
+            "Gear Upshift State",
+            "AVI1 Switch State",
+            "Brake Pedal State",
         ]
     );
-    assert_eq!(reply["more"], 3);
-    for row in reply["rows"].as_array().unwrap() {
-        assert_eq!(row["also"], json!([]), "{}", row["name"]);
-    }
+    assert_eq!(reply["more"], 0);
+    assert_eq!(
+        reply["rows"][3]["also"],
+        json!(["AVI6 Switch State", "Clutch Switch Input State"])
+    );
+    assert_eq!(
+        reply["rows"][7]["also"],
+        json!(["Brake Pedal Switch 1 Input State"])
+    );
+}
+
+/// Nine switches change across the whole 1:44 pm log: eight rows, and one left out.
+#[test]
+fn a_whole_log_is_cut_at_eight_rows_and_says_how_many_are_left_out() {
+    let Some(mut s) = sample_session() else {
+        return;
+    };
+    let log = log_key(&mut s, "PCLog_2026-04-17_0144pm.csv");
+    let reply = rows(&mut s, &log, 0.0, 75.441);
+    assert_eq!(
+        names(&reply),
+        [
+            "AVI1 Switch State",
+            "Brake Pedal State",
+            "Drive By Wire 1 Pin 1 Output State",
+            "Decel Detected",
+            "Clutch State",
+            "Gear Upshift State",
+            "Brake Pressure Front Switch State",
+            "Predicted MAP Active",
+        ]
+    );
+    assert_eq!(reply["more"], 1);
+}
+
+/// The clutch channels part by one sample in this pull: grouped per span they were two rows.
+#[test]
+fn the_1_44_pm_2nd_gear_pull_shows_the_clutch_once() {
+    let Some(mut s) = sample_session() else {
+        return;
+    };
+    let (log, t0, t1) = pull(&mut s, "PCLog_2026-04-17_0144pm.csv|20260417 01:44:01@12.1");
+    assert_eq!((t0, t1), (12.093 - PULL_PAD, 16.282 + PULL_PAD));
+    let reply = rows(&mut s, &log, t0, t1);
+    assert_eq!(
+        names(&reply),
+        [
+            "Clutch State",
+            "Drive By Wire 1 Pin 1 Output State",
+            "Decel Detected",
+            "Gear Upshift State",
+        ]
+    );
+    assert_eq!(
+        reply["rows"][0],
+        json!({
+            "name": "Clutch State",
+            "also": ["AVI6 Switch State", "Clutch Switch Input State"],
+            "on": [[10.61, 12.093], [16.323, 17.333]],
+            "gaps": [],
+            "changes": [10.61, 12.093, 16.323, 17.333],
+        })
+    );
+}
+
+/// The cam solenoid output is logged under two names. Grouped per span they were two rows in this pull.
+#[test]
+fn the_1_46_pm_3rd_gear_pull_shows_the_cam_output_once() {
+    let Some(mut s) = sample_session() else {
+        return;
+    };
+    let (log, t0, t1) = pull(&mut s, "PCLog_2026-04-17_0146pm.csv|20260417 01:46:49@0.7");
+    let reply = rows(&mut s, &log, t0, t1);
+    assert_eq!(
+        names(&reply),
+        [
+            "Decel Detected",
+            "Drive By Wire 1 Pin 1 Output State",
+            "Predicted MAP Active",
+            "Stepper 1 Pin 2 Output State",
+        ]
+    );
+    assert_eq!(
+        reply["rows"][3]["also"],
+        json!(["Cam Control Switched Output State Intake"])
+    );
 }
 
 /// O2 Control State reads only 0 and 1 in the 1:46 pm log, as Decel Detected does, but declares `524288,0`.
@@ -196,7 +278,7 @@ fn the_same_span_gives_the_same_answer_every_time() {
     };
     let (log, t0, t1) = default_pull(&mut s);
     let first = rows(&mut s, &log, t0, t1);
-    // another span in between: the switches found for the log are kept, the rows are not
+    // another span in between: the groups found for the log are kept, the rows are not
     rows(&mut s, &log, 0.0, 10.0);
     assert_eq!(rows(&mut s, &log, t0, t1), first);
 }
