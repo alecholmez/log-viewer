@@ -9,18 +9,19 @@
 
 :root{
   color-scheme:light;
-  --canvas:#f4f4f4; --surface-card:#fcfcfc; --surface-elevated:#ececee;
+  --canvas:#f6f6f7; --surface-card:#fdfdfe; --surface-elevated:#f1f1f3;
   /* the colour of a panel in the app's light theme: a screenshot of part of a panel sits on it with no edge */
-  --surface-shot:#fbfcfd;
-  --hairline:#dcdce0; --hairline-strong:#b4b4bb;
-  --ink:#0d0e10; --body:#3d3d43; --muted:#6a6a72;
+  --surface-shot:#fdfdfe;
+  --hairline:#e4e4e8; --hairline-strong:#d0d0d6;
+  /* body is a step darker than the app's secondary text: it is set in a light weight */
+  --ink:#1d1f23; --body:#4b4e56; --muted:#74777f;
   /* the only colour. It marks the end of a rule, as the redline marks the end of a tachometer. Never a fill, never a button. */
   --redline:#c81e33;
   --display:"Lato","Helvetica Neue",Arial,system-ui,sans-serif;
   --text:"Roboto","Helvetica Neue",Arial,system-ui,sans-serif;
   /* corners: tags 6px, controls 8px, panels and frames 12px */
   --r-tag:6px; --r-ui:8px; --r-box:12px;
-  --ink-dim:#2f3136;
+  --ink-dim:#3a3d44;
   --section:96px;
   --ease:cubic-bezier(.16,1,.3,1);
 }
