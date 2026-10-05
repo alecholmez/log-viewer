@@ -1120,6 +1120,17 @@ try {
       m.sw <= m.cw && m.rail === (width < 860 ? 'static' : 'sticky') && m.chips === 13,
       JSON.stringify(m),
     );
+    // on a touch screen a chip grows with the other buttons: all of them are in the stylesheet's touch block
+    const touch = await page.evaluate(() => ({
+      coarse: matchMedia('(pointer: coarse)').matches,
+      chip: Math.round(document.querySelector('#chips .chip').getBoundingClientRect().height),
+      small: Math.round([...document.querySelectorAll('.btn.sm')].find(b => b.offsetParent).getBoundingClientRect().height),
+    }));
+    check(
+      name + ': a chip is as tall as a small button on a touch screen',
+      touch.coarse && touch.chip >= touch.small - 1,
+      JSON.stringify(touch),
+    );
     const darkA = await textContrast(page, '.ab button.r0[aria-pressed="true"]');
     const darkNote = await textContrast(page, '.finding.info .ico');
     check(

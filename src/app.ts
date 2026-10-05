@@ -24,6 +24,7 @@ import {
   VEH_IDS,
   chInfo,
   chipsKey,
+  chipsWanted,
   copyView,
   css,
   curTable,
@@ -1041,7 +1042,7 @@ const CHIPS_FAILED = 'Switches and states failed: ';
  */
 function syncChips(): void {
   const f = S.focus;
-  const key = f && S.chipsShow ? chipsKey(f) : '';
+  const key = f && chipsWanted() ? chipsKey(f) : '';
   if (key === chipsAsked) return;
   chipsAsked = key;
   const seq = ++chipsSeq;

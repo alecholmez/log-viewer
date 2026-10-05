@@ -219,12 +219,13 @@ fn the_answer_holds_the_switches_and_the_states_of_the_span() {
     };
     let (log, t0, t1) = default_pull(&mut s);
     let reply = chips(&mut s, &log, t0, t1);
-    let keys: Vec<&str> = reply
+    let mut keys: Vec<&str> = reply
         .as_object()
         .unwrap()
         .keys()
         .map(String::as_str)
         .collect();
+    keys.sort_unstable();
     assert_eq!(keys, ["states", "switches"]);
     assert_eq!(reply["switches"]["rows"].as_array().unwrap().len(), 6);
     assert_eq!(reply["switches"]["more"], 0);

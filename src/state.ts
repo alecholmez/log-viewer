@@ -211,6 +211,9 @@ export const replaySpan = (f: Focus): [number, number] => [f.w0, f.w1];
 /** Names the log and span the replay shows. Chips are kept with this key, so they are shown only for the span they were asked for. */
 export const chipsKey = (f: Focus): string => [f.log.key, ...replaySpan(f)].join('|');
 
+/** Whether chips are wanted: a log is on screen and "Show switches and states that change" is on. The one rule for asking for them and for keeping their room. */
+export const chipsWanted = (): boolean => !!S.focus && S.chipsShow;
+
 /** The channels behind a finding, shown in place of the user's view until they leave it. */
 export interface FindingView extends View {
   title: string;
@@ -267,9 +270,12 @@ export const S = {
   rev: 0,
   fview: null as FindingView | null,
   watchDir: '',
-  /** switch and state chips for the span on screen, as the core returned them; null when there are none to show */
+  /**
+   * the core's answer for the span named by `chipsFor`; null until an answer for the span on screen arrives, after a
+   * request that failed, and while the setting is off. A span with no chips is an answer with empty rows, not null.
+   */
   chips: null as Chips | null,
-  /** the `chipsKey` of the log and span the chips in `chips` are for; empty when there are none */
+  /** the `chipsKey` of the log and span the answer in `chips` is for; empty while `chips` is null */
   chipsFor: '',
   /** "Show switches and states that change" in the Channels picker */
   chipsShow: true,

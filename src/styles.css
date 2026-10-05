@@ -292,4 +292,5 @@ body.dropping .app{outline:2px dashed var(--ink-2);outline-offset:6px;border-rad
   .seg button{padding:8px 11px}
   .ab button.r0,.ab button.r1,.ab button.r2{width:34px;height:34px}
   .icon-btn{padding:6px 7px}
+  .chip{padding:7px 10px}
 }

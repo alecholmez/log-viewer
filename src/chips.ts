@@ -2,7 +2,7 @@
 // The core decides which channels they are, their order, the limits and where each changes; this module reads that answer
 // at a time and draws it. No samples are read here.
 
-import { $, S, chipsKey, el, fmt, replaySpan } from './state';
+import { $, S, chipsKey, chipsWanted, el, fmt, replaySpan } from './state';
 import type { Chips, StateRow, SwitchRow } from './types';
 
 /** One chip: a switch or a state from the core's answer. */
@@ -34,13 +34,17 @@ export function chipText(chip: Chip, t: number, spanEnd: number): string {
   return fmt(v);
 }
 
-/** The answer the chips on screen were built from, and whether the box was holding its height for an answer on its way. */
+/** The answer the chips on screen were built from, and whether the box was keeping its height with no chips to show yet. */
 let built: Chips | null = null;
 let held = false;
 /** The chips on screen, in the order of chipList, each with the element its reading goes in. */
 let shown: { chip: Chip; box: HTMLButtonElement; vl: HTMLElement }[] = [];
 
-/** Build the chips for an answer. `hold`: an answer is on its way, so the box keeps its height and the traces under it stay put. */
+/**
+ * Build the chips for an answer. `hold`: chips are wanted for the span on screen and there are none to show yet, because
+ * they were asked for and have not arrived, or the request failed and waits for Try again. The box keeps its height, so
+ * the traces under it stay put.
+ */
 function renderChips(c: Chips | null, hold: boolean): void {
   const box = $('chips');
   box.style.minHeight = hold && !box.hidden ? box.offsetHeight + 'px' : '';
@@ -66,7 +70,7 @@ function renderChips(c: Chips | null, hold: boolean): void {
 /** Bring the chips up to date: rebuilt when the answer changes, then each reads the playhead. Runs on every draw. */
 export function updateChips(): void {
   const c = shownChips();
-  const hold = !c && S.chipsShow && !!S.focus;
+  const hold = !c && chipsWanted();
   if (c !== built || hold !== held) renderChips(c, hold);
   const f = S.focus;
   if (!f) return;
