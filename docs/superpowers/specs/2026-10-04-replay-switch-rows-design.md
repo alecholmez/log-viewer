@@ -1,6 +1,6 @@
 # Replay: switch rows
 
-Status: built, by `docs/superpowers/plans/2026-10-04-replay-switch-rows.md`, then fixed by `docs/superpowers/plans/2026-10-04-switch-rows-fixes.md`. What was settled while building and fixing is marked "As built" below.
+Status: replaced by `2026-10-04-replay-state-chips-design.md` (plan `docs/superpowers/plans/2026-10-04-replay-state-chips.md`): the switch rule and the grouping below still hold for the chips; the rows, their pointing and their limit of eight are gone. First built by `docs/superpowers/plans/2026-10-04-replay-switch-rows.md`, then fixed by `docs/superpowers/plans/2026-10-04-switch-rows-fixes.md`. What was settled while building and fixing is marked "As built" below.
 
 ## Why
 

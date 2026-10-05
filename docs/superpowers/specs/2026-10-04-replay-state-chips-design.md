@@ -1,6 +1,6 @@
 # Replay: switches and states as chips
 
-Status: approved by the owner on 2026-10-04 from a live prototype of four directions. It replaces the switch rows under the replay traces (`2026-10-04-replay-switch-rows-design.md`), which shipped the same day and were hard to read: the tooltip sat on the rows, the marks through the traces followed the pointer, and the rows looked like an afterthought.
+Status: approved by the owner on 2026-10-04 from a live prototype of four directions; built by `docs/superpowers/plans/2026-10-04-replay-state-chips.md`, which lists the decisions taken where this design is silent. It replaces the switch rows under the replay traces (`2026-10-04-replay-switch-rows-design.md`), which shipped the same day and were hard to read: the tooltip sat on the rows, the marks through the traces followed the pointer, and the rows looked like an afterthought.
 
 ## Why
 

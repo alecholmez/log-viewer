@@ -61,7 +61,10 @@ crates/core        Rust. All parsing and analysis. No UI or platform code.
   src/dyno.rs        pull detection, virtual dyno
   src/table.rs       ignition and fuel tables binned from logs
   src/findings.rs    detectors: what is wrong, why it matters, what to change
-  src/switches.rs    on/off channels and when they change, for the replay's switch rows
+  src/span.rs        what switches and states share: a channel traced over the log, the span on screen, the limit
+  src/switches.rs    on/off channels: which are switches, which are one signal, what they do in a span
+  src/states.rs      channels that hold one of a few whole-number readings, such as Gear
+  src/chips.rs       the replay's chips for a span: switches and states
   src/session.rs     library on disk and the command surface (`Session::dispatch`)
 crates/devserver   Rust. The same commands over HTTP, for a browser and for tests.
 src-tauri          Rust. The native shell: owns a Session, forwards commands, handles opened files.
@@ -69,6 +72,7 @@ src                TypeScript. The UI: DOM and canvas, no framework.
   api.ts             the only file that talks to the core (IPC in the app, HTTP in a browser)
   app.ts             panels, controls, importing
   charts.ts          power chart, replay traces, 3D table
+  chips.ts           the replay's chips: what each reads at the playhead, the chosen chip, stepping
   state.ts           app state, constants, shared helpers
 tests/ui.mjs       end-to-end test of the UI against the real core
 testdata/logs      eight real logs the tests run on
@@ -76,16 +80,16 @@ site               the website: one static page, published to GitHub Pages
 DESIGN.md          the design system: colours, type and rules for the site and the app
 ```
 
-Every platform runs the same `Session::dispatch`. The UI asks for `logs`, `log_data`, `overview`, `dyno`, `switches` and so on, and draws what comes back. Numbers are computed in Rust; the UI only formats them.
+Every platform runs the same `Session::dispatch`. The UI asks for `logs`, `log_data`, `overview`, `dyno`, `chips` and so on, and draws what comes back. Numbers are computed in Rust; the UI only formats them.
 
 The library is in the system's app-data directory for `io.waypoint.logviewer` (`~/Library/Application Support/io.waypoint.logviewer` on macOS): `logs/` holds the imported files, `settings.json` holds the vehicle, saved views and names.
 
 ## Tests
 
 ```sh
-npm run test:core    # core against a snapshot from the real logs; library import, duplicates, watch folder; switch rows
+npm run test:core    # core against a snapshot from the real logs; library import, duplicates, watch folder; switches and states
 npm run build && cargo build --release -p logviewer-dev
-npm run test:ui      # drives the UI in a browser: import, dyno, findings, views, replay, switch rows, phone and tablet widths
+npm run test:ui      # drives the UI in a browser: import, dyno, findings, views, replay and its chips, phone and tablet widths
 ```
 
 `crates/core/tests/golden.json` holds every pull, table cell, finding sentence and dyno curve for the logs in `testdata/logs`. A change in the analysis shows up as a diff against it. After an intended change, refresh it with `UPDATE_GOLDEN=1 cargo test -p logviewer-core`.
@@ -120,6 +124,6 @@ The screenshots are the app itself on the logs in `testdata/logs`, so retake the
 
 - Unit scaling for NSP channel types was worked out from the logs, not from Haltech documentation. The common ones (RPM, pressure, lambda, angle, temperature, percentage) are checked against plausible engine values; unusual channel types fall back to raw values.
 - The power curve is smoothed along engine speed; **Smoothing** above the chart sets how much, and Off shows the curve as first computed. The peaks are read from the curve that is drawn, so they move a little with the setting. The curve keeps its whole rpm range at every level. Findings and the fuel check are read from the curve as first computed, so the setting does not change them. A finding about the shape of the curve, such as a torque dip, is marked on the chart: a pointer under the point it names, and a thin line showing that stretch before smoothing.
-- Under the replay traces, on/off channels are drawn as switch rows: a bar that is filled while the switch is on. NSP does not mark its switches, so the core reads them from the log: a channel is a switch when every sample it has in the log is exactly 0 or 1, both occur, and the range the log's header declares for it (`DisplayMaxMin`) lies within 0 to 2. A state that declares 0 to 2 and reads only 0 and 1 in one log is taken for a switch in that log. The same signal is often logged under several names: channels that start in the same state and make the same changes, each at most one sample apart, across the whole log are one signal and share one row. The row is drawn from the channel with the shortest name and appears when that channel changes inside the span on screen; pointing at the row lists the other names and marks its changes on the traces. At most eight rows are shown, in order of first change, and the note under the traces counts the rest. A stretch with no samples is left empty. By RPM hides the rows. **Show switches that change** in Channels turns them off.
+- Under the readout cards in the replay, a chip for each switch and each state that changes in the span on screen reads it at the playhead: `On` or `Off` for a switch, the logged number for a state. NSP does not mark its switches, so the core reads them from the log: a channel is a switch when every sample it has in the log is exactly 0 or 1, both occur, and the range the log's header declares for it (`DisplayMaxMin`) lies within 0 to 2. A state that declares 0 to 2 and reads only 0 and 1 in one log is taken for a switch in that log. The same signal is often logged under several names: channels that start in the same state and make the same changes, each at most one sample apart, across the whole log are one signal and share one chip, named for the channel with the shortest name; the chip's tooltip lists the others. A channel is a state when it is not a switch, has no unit (`Type : Raw` or `Gear`), every sample is a whole number, it takes two to eight values in the log, its declared range is no wider than 128, it changes no more than twice a second on average over the log, and it is not one of the logger's own channels (a name that starts `Data Log `). At most twelve switches and eight states are shown, the ones that change least when more change, and the note under the traces counts the rest. A tick above the time axis marks every change. Clicking a chip shades it behind the traces (where a switch is on; every other section of a state, with each value written in the first trace); **Previous change** and **Next change** move the playhead to its changes, or to any chip's when none is chosen. By RPM keeps the chips and draws no ticks or shading. **Show switches and states that change** in Channels turns them off. A readout card is shown only for a channel without a trace: a traced channel's value is written beside its trace.
 - The virtual dyno is road-load math: mass × acceleration + drag + rolling resistance. Road gradient and wind are not measured, so compare runs on the same road rather than trusting one peak. Two checks are shown with each run: ECU speed against gearing, and commanded fuel flow against the power estimate.
 - The vehicle catalog is a small sample. The 2013 BRZ is from Subaru's specification sheet; treat the rest as starting points and override them.

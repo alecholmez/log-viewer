@@ -84,6 +84,12 @@ try {
     const fuel = '#find-all .finding:has(button:has-text("Open fuel table"))';
     await page.locator(fuel).first().locator('summary').click();
     await save('finding-fuel', await box(fuel));
+    // the clutch chip chosen, so the picture shows the shading behind the traces
+    await page
+      .locator('#chips .chip')
+      .filter({ has: page.getByText('Clutch State', { exact: true }) })
+      .click();
+    await page.waitForTimeout(300);
     const [readouts, traces] = [await box('#readouts'), await box('#tr-wrap')];
     await save('replay', { x: readouts.x, y: readouts.y, width: readouts.width, height: traces.y + traces.height - readouts.y });
     await page.close();
