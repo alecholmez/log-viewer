@@ -202,9 +202,15 @@ try {
   // a log is named by its date and time, from the core; the year is added when it is not this year
   const logDay = 'Apr 17' + (new Date().getFullYear() === 2026 ? '' : ', 2026');
   const logAt = time => logDay + ', ' + time;
-  /** Click one of a log's own buttons (Replay, Rename, Remove, Confirm), the log known by text in it. False when there is no such button. */
+  /**
+   * Click one of a log's own buttons (Replay, Rename, Remove, Confirm), the log known by text in it, opening the log first
+   * when it is a closed log with no pull. False when there is no such button.
+   */
   const logAction = async (title, label) => {
-    const b = page.locator('#logs .log', { hasText: title }).locator('.links button', { hasText: label });
+    const log = page.locator('#logs .log', { hasText: title });
+    const closed = log.locator('.log-toggle[aria-expanded="false"]');
+    if (await closed.count()) await closed.first().click();
+    const b = log.locator('.links button', { hasText: label });
     if (!(await b.count())) return false;
     await b.first().click();
     return true;
@@ -254,6 +260,100 @@ try {
         'No pulls: the accelerator pedal peaked at 14.7%, under the 15% a pull needs.',
       ].join(' | '),
     reasons.join(' | '),
+  );
+  // a log with no pull is one line until it is opened: the title, then its length and "No pulls"; no actions
+  /** A log with no pull as the list shows it, the log known by text in it: its button, and what of it is on screen. */
+  const logState = title =>
+    page.evaluate(title => {
+      const log = [...document.querySelectorAll('#logs .log')].find(l => l.textContent.includes(title));
+      const b = log?.querySelector('.log-toggle');
+      if (!b) return null;
+      const more = document.getElementById(b.getAttribute('aria-controls'));
+      const seen = sel => [...log.querySelectorAll(sel)].filter(e => e.offsetParent).map(e => e.textContent);
+      return {
+        expanded: b.getAttribute('aria-expanded'),
+        line: seen('.log-toggle .ttl, .log-toggle .meta').join(' / '),
+        height: Math.round(log.getBoundingClientRect().height),
+        hidden: !!more && more.hidden,
+        actions: seen('.links button').join(),
+        why: seen('.why').join(),
+        file: seen('.file').join(),
+        focused: document.activeElement === b,
+      };
+    }, title);
+  const toggleOf = title => page.locator('#logs .log', { hasText: title }).locator('.log-toggle');
+  const closedLogs = await page.evaluate(() =>
+    [...document.querySelectorAll('#logs .log-toggle')].map(b => b.getAttribute('aria-expanded')).join(),
+  );
+  check(
+    'the four logs with no pull start closed, and a log with pulls has no such button',
+    closedLogs === 'false,false,false,false',
+    closedLogs,
+  );
+  const closedLine = await logState(logAt('1:48 pm'));
+  check(
+    'a closed log is one line, the title then its length and No pulls, with no actions',
+    closedLine?.line === logAt('1:48 pm') + ' / 33 s · No pulls' &&
+      closedLine.hidden &&
+      closedLine.actions === '' &&
+      closedLine.height <= 24,
+    JSON.stringify(closedLine),
+  );
+  if (await toggleOf(logAt('1:48 pm')).count()) await toggleOf(logAt('1:48 pm')).click();
+  const opened = await logState(logAt('1:48 pm'));
+  check(
+    'opening it shows its lines, its actions and why it has no pull, and its button says it is open',
+    opened?.expanded === 'true' &&
+      !opened.hidden &&
+      opened.line === logAt('1:48 pm') &&
+      opened.actions === 'Replay,Rename,Remove' &&
+      opened.why === 'No pulls: the accelerator pedal peaked at 14.7%, under the 15% a pull needs.' &&
+      opened.file === 'PCLog_2026-04-17_0148pm.csv' &&
+      opened.focused,
+    JSON.stringify(opened),
+  );
+  // a rename rebuilds the list: the log stays open, and focus goes back to its Rename button
+  await logAction(logAt('1:48 pm'), 'Rename');
+  await page.keyboard.type('Short trip');
+  await page.keyboard.press('Enter');
+  const focusAfterRename = await page.evaluate(() => {
+    const a = document.activeElement;
+    if (!a || a === document.body) return 'nothing has focus';
+    const log = a.closest('.log');
+    return [a?.textContent, log?.querySelector('.ttl')?.textContent, log?.querySelector('.log-toggle')?.getAttribute('aria-expanded')].join(
+      ' / ',
+    );
+  });
+  check(
+    'after a rename its Rename button has focus, and the log stays open',
+    focusAfterRename === 'Rename / Short trip / true',
+    focusAfterRename,
+  );
+  // an empty name is no name
+  await logAction('Short trip', 'Rename');
+  if (await page.locator('#logs input.rename').count()) {
+    await page.fill('#logs input.rename', '');
+    await page.keyboard.press('Enter');
+  }
+  if (await toggleOf(logAt('1:48 pm')).count()) await toggleOf(logAt('1:48 pm')).focus();
+  await page.keyboard.press('Enter');
+  const reclosed = await logState(logAt('1:48 pm'));
+  check(
+    'pressing the line again closes it, and the button keeps focus',
+    reclosed?.expanded === 'false' && reclosed.hidden && reclosed.actions === '' && reclosed.focused,
+    JSON.stringify(reclosed),
+  );
+  // a pull's button keeps focus when the list is rebuilt under it
+  const c2974 = page.locator('.pull', { hasText: '3rd gear · 2,974' }).locator('button.r2');
+  await c2974.click();
+  const focusAfterRun = await page.evaluate(
+    () => (document.activeElement?.dataset.fid ?? '') + ' ' + document.activeElement?.getAttribute('aria-pressed'),
+  );
+  await c2974.click();
+  check(
+    'a pull button keeps focus when the list is rebuilt',
+    focusAfterRun === 'run2|PCLog_2026-04-17_0146pm.csv|20260417 01:46:49@0.7 true',
+    focusAfterRun,
   );
   // the quiet grey is --ink-3; the contrast is against the panel the name sits on
   const fileInk = await page.evaluate(() => {
@@ -509,6 +609,18 @@ try {
     'back restores the working view',
     await page.evaluate(() => window.__logViewer.fview === null && document.querySelectorAll('.ro.flag').length === 0),
   );
+  // a log with no pull opens when the replay comes to it: this finding was also seen in the 1:48 pm log
+  const occ148 = lc.locator('.acts button', { hasText: '688 rpm' });
+  if (await occ148.count()) await occ148.click();
+  const replayOpened = await logState(logAt('1:48 pm'));
+  check(
+    'a log with no pull is open while the replay shows it',
+    replayOpened?.expanded === 'true' &&
+      replayOpened.actions === 'Replay,Rename,Remove' &&
+      (await text(page, 'replay-what')).endsWith(logAt('1:48 pm')),
+    JSON.stringify(replayOpened) + ' ' + (await text(page, 'replay-what')),
+  );
+  await page.click('#view-back');
 
   // fuel finding opens the fuel table as a grid
   const fuel = page.locator('.finding', { has: page.locator('button', { hasText: 'Open fuel table' }) }).first();
@@ -1122,6 +1234,10 @@ try {
       back.smooth === 'high',
     JSON.stringify(back),
   );
+  const startClosed = await page.evaluate(() =>
+    [...document.querySelectorAll('#logs .log-toggle')].map(b => b.getAttribute('aria-expanded')).join(),
+  );
+  check('which logs are open is not kept: a new window starts with them closed', startClosed === 'false,false,false,false', startClosed);
 
   // the chips were turned off before the window closed: they stay off, and ticking the box brings them back
   const kept = await page.evaluate(() => ({

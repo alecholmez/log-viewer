@@ -295,12 +295,23 @@ async function recompute(): Promise<void> {
 
 // ---------- logs and pulls ----------
 
-function startRename(holder: HTMLElement, current: string | undefined, fallback: string, commit: (v: string | null) => void): void {
+/**
+ * Put a name field in place of what `holder` holds. `from` is the Rename button the edit started from: the field takes its
+ * `data-fid`, so when the list is rebuilt after the edit, focus goes back to that button.
+ */
+function startRename(
+  holder: HTMLElement,
+  current: string | undefined,
+  fallback: string,
+  commit: (v: string | null) => void,
+  from: HTMLElement,
+): void {
   const inp = el('input', 'rename');
   inp.type = 'text';
   inp.value = current || '';
   inp.placeholder = fallback;
   inp.setAttribute('aria-label', 'Name');
+  if (from.dataset.fid) inp.dataset.fid = from.dataset.fid;
   holder.textContent = '';
   holder.appendChild(inp);
   inp.focus();
@@ -312,15 +323,19 @@ function startRename(holder: HTMLElement, current: string | undefined, fallback:
     commit(ok ? inp.value.trim() : null);
   };
   inp.addEventListener('keydown', e => {
-    if (e.key === 'Enter') finish(true);
-    else if (e.key === 'Escape') finish(false);
+    if (e.key !== 'Enter' && e.key !== 'Escape') return;
+    // the key is spent here: focus moves to the Rename button as the list is rebuilt, and the key must not press it
+    e.preventDefault();
+    finish(e.key === 'Enter');
   });
   inp.addEventListener('blur', () => finish(true));
 }
 
-function linkBtn(label: string, onClick: (b: HTMLButtonElement) => void): HTMLButtonElement {
+/** A text action in the list. `fid` names it, so that it gets focus back when the list is rebuilt. */
+function linkBtn(label: string, fid: string, onClick: (b: HTMLButtonElement) => void): HTMLButtonElement {
   const b = el('button', 'icon-btn', label);
   b.type = 'button';
+  b.dataset.fid = fid;
   b.addEventListener('click', () => onClick(b));
   return b;
 }
@@ -337,8 +352,148 @@ async function removeLog(log: Log): Promise<void> {
   }
 }
 
+/** Logs with no pull that are open, by key. Not saved: every launch starts with them closed. */
+const openLogs = new Set<string>();
+/** The key of the log the replay showed when the list last looked, so a log opens once when the replay comes to it. */
+let replayedLog = '';
+
+/**
+ * Bring the list in line with what is open. The log the replay has come to opens, so its actions are at hand; the person
+ * can close it again. Each log with no pull is shown open or closed in place, so a button that has focus keeps it.
+ */
+function syncLogs(): void {
+  const key = S.focus ? S.focus.log.key : '';
+  if (key !== replayedLog) {
+    replayedLog = key;
+    if (key) openLogs.add(key);
+  }
+  document.querySelectorAll<HTMLButtonElement>('#logs .log-toggle').forEach(b => {
+    const open = openLogs.has(b.dataset.key!);
+    b.setAttribute('aria-expanded', String(open));
+    b.querySelector<HTMLElement>('.meta')!.hidden = open;
+    $(b.getAttribute('aria-controls')!).hidden = !open;
+  });
+}
+
+/** Replay, Rename and Remove for a log. Rename puts the name field in `holder`, in place of the title. */
+function logActions(log: Log, holder: HTMLElement): HTMLElement {
+  const acts = el('div', 'links');
+  acts.appendChild(
+    linkBtn('Replay', 'replay|' + log.key, () => {
+      leaveFinding();
+      focusLog(log);
+      renderStats();
+      drawAll();
+      scrollTo('replay-panel');
+    }),
+  );
+  acts.appendChild(
+    linkBtn('Rename', 'rename|' + log.key, b =>
+      // renaming starts from the log's name, or from its date and time; leaving that, or nothing, keeps no name
+      startRename(
+        holder,
+        logName(log),
+        logDefault(log),
+        v => {
+          if (v !== null) {
+            if (v && v !== logDefault(log)) S.names.logs[log.key] = v;
+            else delete S.names.logs[log.key];
+            saveSettings();
+          }
+          renderLogs();
+          renderStats();
+        },
+        b,
+      ),
+    ),
+  );
+  // removing takes two clicks: the first arms the button for a few seconds
+  acts.appendChild(
+    linkBtn('Remove', 'remove|' + log.key, b => {
+      if (b.dataset.armed) return void removeLog(log);
+      b.dataset.armed = '1';
+      b.textContent = 'Confirm';
+      window.setTimeout(() => {
+        delete b.dataset.armed;
+        b.textContent = 'Remove';
+      }, 3000);
+    }),
+  );
+  return acts;
+}
+
+/** What any log shows under its title: its length (after its date and time when the person named it), its actions, and its file name. */
+function logHead(log: Log, txt: HTMLElement, holder: HTMLElement): HTMLElement {
+  const head = el('div', 'log-head');
+  txt.appendChild(el('div', 'meta', (S.names.logs[log.key] ? logDefault(log) + ' · ' : '') + lengthLabel(log.duration)));
+  head.appendChild(txt);
+  head.appendChild(logActions(log, holder));
+  // the file name on its own line, unless the log is titled by it
+  if (log.startedAt) {
+    const file = el('div', 'file', log.name);
+    file.title = log.name;
+    head.appendChild(file);
+  }
+  return head;
+}
+
+/** One pull: its name and facts, A, B and C, and Rename. */
+function pullRow(p: Pull): HTMLLIElement {
+  const slot = S.runs.indexOf(p);
+  const row = el('li', 'pull' + (slot >= 0 ? ' on' : ''));
+  const t2 = el('div');
+  const pt = el('div', 'ttl', pullName(p));
+  t2.appendChild(pt);
+  // no-break spaces: a value never parts from its unit, and a separator never starts a line
+  const nb = ' ';
+  const facts = [
+    'at' + nb + p.t0.toFixed(1) + nb + 's',
+    p.dur.toFixed(1) + nb + 's',
+    'accelerator' + nb + fmt(p.peakPedal) + '%',
+    fmt(p.peakMap) + nb + 'kPa',
+  ];
+  const meta = el('div', 'meta', (S.names.pulls[p.key] ? pullDefault(p) + ' · ' : '') + facts.join(nb + '· ') + ' ');
+  t2.appendChild(meta);
+  const ab = el('div', 'ab');
+  RUN.forEach((nm, i) => {
+    const b = el('button', 'r' + i, nm);
+    b.type = 'button';
+    b.dataset.fid = 'run' + i + '|' + p.key;
+    b.setAttribute('aria-pressed', String(slot === i));
+    b.setAttribute('aria-label', i ? 'Overlay as run ' + nm : 'Replay as run A');
+    if (i && slot === 0) b.disabled = true;
+    b.addEventListener('click', () => setRun(i, p));
+    ab.appendChild(b);
+  });
+  meta.appendChild(
+    linkBtn('Rename', 'rename|' + p.key, b =>
+      startRename(
+        pt,
+        S.names.pulls[p.key],
+        pullDefault(p),
+        v => {
+          if (v !== null) {
+            if (v) S.names.pulls[p.key] = v;
+            else delete S.names.pulls[p.key];
+            saveSettings();
+          }
+          if (S.focus && S.focus.pull === p) S.focus.label = pullName(p) + ' · ' + logName(p.log);
+          renderLogs();
+          renderStats();
+        },
+        b,
+      ),
+    ),
+  );
+  row.appendChild(t2);
+  row.appendChild(ab);
+  return row;
+}
+
 function renderLogs(): void {
   const ol = $('logs');
+  // the list is rebuilt from scratch: a control in it that has focus gets focus back in the new list, found by its data-fid
+  const had = ol.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.fid : undefined;
   ol.textContent = '';
   // an empty library shows one panel that says how to start, in place of the charts
   document.querySelector('.app')!.classList.toggle('no-logs', !S.logs.length);
@@ -352,110 +507,44 @@ function renderLogs(): void {
     ol.appendChild(li);
     return;
   }
-  for (const log of S.logs) {
+  S.logs.forEach((log, n) => {
     const li = el('li', 'log');
-    const head = el('div', 'log-head');
-    const txt = el('div', 'log-text');
-    const ttl = el('div', 'ttl', logName(log));
-    txt.appendChild(ttl);
-    // the length; a log the person named also keeps its date and time here
-    txt.appendChild(el('div', 'meta', (S.names.logs[log.key] ? logDefault(log) + ' · ' : '') + lengthLabel(log.duration)));
-    const acts = el('div', 'links');
-    acts.appendChild(
-      linkBtn('Replay', () => {
-        leaveFinding();
-        focusLog(log);
-        renderStats();
-        drawAll();
-        scrollTo('replay-panel');
-      }),
-    );
-    acts.appendChild(
-      linkBtn('Rename', () =>
-        // renaming starts from the log's name, or from its date and time; leaving that, or nothing, keeps no name
-        startRename(ttl, logName(log), logDefault(log), v => {
-          if (v !== null) {
-            if (v && v !== logDefault(log)) S.names.logs[log.key] = v;
-            else delete S.names.logs[log.key];
-            saveSettings();
-          }
-          renderLogs();
-          renderStats();
-        }),
-      ),
-    );
-    // removing takes two clicks: the first arms the button for a few seconds
-    acts.appendChild(
-      linkBtn('Remove', b => {
-        if (b.dataset.armed) return void removeLog(log);
-        b.dataset.armed = '1';
-        b.textContent = 'Confirm';
-        window.setTimeout(() => {
-          delete b.dataset.armed;
-          b.textContent = 'Remove';
-        }, 3000);
-      }),
-    );
-    head.appendChild(txt);
-    head.appendChild(acts);
-    // the file name on its own line, unless the log is titled by it
-    if (log.startedAt) {
-      const file = el('div', 'file', log.name);
-      file.title = log.name;
-      head.appendChild(file);
-    }
-    li.appendChild(head);
-
     const pulls = S.pulls.filter(p => p.log === log).sort((a, b) => a.t0 - b.t0);
-    const pl = el('ol', 'pulls');
-    if (!pulls.length) pl.appendChild(el('li', 'meta why', S.noPulls.get(log.key) ?? ''));
-    for (const p of pulls) {
-      const slot = S.runs.indexOf(p);
-      const row = el('li', 'pull' + (slot >= 0 ? ' on' : ''));
-      const t2 = el('div');
-      const pt = el('div', 'ttl', pullName(p));
-      t2.appendChild(pt);
-      // no-break spaces: a value never parts from its unit, and a separator never starts a line
-      const nb = '\u00a0';
-      const facts = [
-        'at' + nb + p.t0.toFixed(1) + nb + 's',
-        p.dur.toFixed(1) + nb + 's',
-        'accelerator' + nb + fmt(p.peakPedal) + '%',
-        fmt(p.peakMap) + nb + 'kPa',
-      ];
-      const meta = el('div', 'meta', (S.names.pulls[p.key] ? pullDefault(p) + ' · ' : '') + facts.join(nb + '· ') + ' ');
-      t2.appendChild(meta);
-      const ab = el('div', 'ab');
-      RUN.forEach((nm, i) => {
-        const b = el('button', 'r' + i, nm);
-        b.type = 'button';
-        b.setAttribute('aria-pressed', String(slot === i));
-        b.setAttribute('aria-label', i ? 'Overlay as run ' + nm : 'Replay as run A');
-        if (i && slot === 0) b.disabled = true;
-        b.addEventListener('click', () => setRun(i, p));
-        ab.appendChild(b);
+    if (pulls.length) {
+      // a log with pulls is always open: its lines, then its pulls
+      const txt = el('div', 'log-text');
+      const ttl = el('div', 'ttl', logName(log));
+      txt.appendChild(ttl);
+      li.appendChild(logHead(log, txt, ttl));
+      const pl = el('ol', 'pulls');
+      for (const p of pulls) pl.appendChild(pullRow(p));
+      li.appendChild(pl);
+    } else {
+      // a log with no pull is one line, the title and "No pulls", until it is opened; the whole line is the button
+      const holder = el('div', 'log-title');
+      const toggle = el('button', 'log-toggle');
+      toggle.type = 'button';
+      toggle.dataset.key = log.key;
+      toggle.dataset.fid = 'open|' + log.key;
+      toggle.setAttribute('aria-controls', 'log-more-' + n);
+      toggle.appendChild(el('span', 'ttl', logName(log)));
+      toggle.appendChild(el('span', 'meta', lengthLabel(log.duration) + ' · No pulls'));
+      toggle.addEventListener('click', () => {
+        if (!openLogs.delete(log.key)) openLogs.add(log.key);
+        syncLogs();
       });
-      meta.appendChild(
-        linkBtn('Rename', () =>
-          startRename(pt, S.names.pulls[p.key], pullDefault(p), v => {
-            if (v !== null) {
-              if (v) S.names.pulls[p.key] = v;
-              else delete S.names.pulls[p.key];
-              saveSettings();
-            }
-            if (S.focus && S.focus.pull === p) S.focus.label = pullName(p) + ' · ' + logName(p.log);
-            renderLogs();
-            renderStats();
-          }),
-        ),
-      );
-      row.appendChild(t2);
-      row.appendChild(ab);
-      pl.appendChild(row);
+      holder.appendChild(toggle);
+      li.appendChild(holder);
+      const more = el('div', 'log-more');
+      more.id = 'log-more-' + n;
+      more.appendChild(logHead(log, el('div', 'log-text'), holder));
+      more.appendChild(el('p', 'meta why', S.noPulls.get(log.key) ?? ''));
+      li.appendChild(more);
     }
-    li.appendChild(pl);
     ol.appendChild(li);
-  }
+  });
+  syncLogs();
+  if (had) [...ol.querySelectorAll<HTMLElement>('[data-fid]')].find(e => e.dataset.fid === had)?.focus();
 }
 
 // ---------- stats, legend, findings ----------
@@ -505,6 +594,8 @@ function renderStats(): void {
       ' lb with driver. A street pull cannot measure road gradient or wind, so the difference between runs on the same road is more reliable than either peak.'
     : '';
   $('replay-what').textContent = S.focus ? S.focus.label : '';
+  // the list follows what the replay shows: a log with no pull opens when the replay comes to it
+  syncLogs();
   $('find-run-h').textContent = S.runs[0] ? 'Run A · ' + pullName(S.runs[0]) : 'Run A';
 }
 

@@ -84,8 +84,8 @@ h3{font-size:12.5px;font-weight:700;color:var(--ink-2);margin:12px 0 8px}
 .hint,.note,.fhead,.finding li,.finding .why,.empty p{text-wrap:pretty}
 .meta,.note,.finding li{font-weight:400}
 .btn{font:inherit;font-size:13px;font-weight:400;color:var(--ink);background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:6px 11px;cursor:pointer;line-height:1.2}
-.btn,.seg button,.ab button,.icon-btn,.finding summary,.chip{transition:background-color .14s,border-color .14s,color .14s,opacity .14s,transform .14s}
-.btn:active:not(:disabled),.seg button:active,.ab button:active,.chip:active{transform:translateY(1px)}
+.btn,.seg button,.ab button,.icon-btn,.finding summary,.chip,.log-toggle{transition:background-color .14s,border-color .14s,color .14s,opacity .14s,transform .14s}
+.btn:active:not(:disabled),.seg button:active,.ab button:active,.chip:active,.log-toggle:active{transform:translateY(1px)}
 .btn:hover{background:var(--inset)}
 .btn.primary{background:var(--primary);color:var(--on-primary);border-color:var(--primary);font-weight:700}
 .btn.primary:hover{opacity:.88;background:var(--primary)}
@@ -123,6 +123,13 @@ input[type="text"],input[type="number"],input[type="search"],select{font:inherit
 .icon-btn{font:inherit;font-size:12px;color:var(--ink-2);background:none;border:0;padding:3px 5px;border-radius:6px;cursor:pointer;text-underline-offset:2px}
 .icon-btn:hover,.icon-btn:focus-visible{color:var(--ink);text-decoration:underline}
 .rename{width:100%}
+/* a log with no pull: one line, the title and "No pulls" in the quiet grey, that opens it; open, it shows what any log shows */
+.log-toggle{display:flex;align-items:baseline;gap:8px;width:calc(100% + 8px);margin:-3px -4px;padding:3px 4px;font:inherit;color:var(--ink);text-align:left;background:none;border:0;border-radius:6px;cursor:pointer}
+.log-toggle:hover{background:var(--inset)}
+.log-toggle .ttl{min-width:0;font-weight:700;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.log-toggle .meta{flex:none;color:var(--ink-3)}
+.log-more{margin-top:4px}
+.log-more .why{margin-top:6px}
 
 /* findings */
 /* two columns side by side, each its own list, so a finding stays in its column when another opens or closes.
@@ -298,4 +305,5 @@ body.dropping .app{outline:2px dashed var(--ink-2);outline-offset:6px;border-rad
   .ab button.r0,.ab button.r1,.ab button.r2{width:34px;height:34px}
   .icon-btn{padding:6px 7px}
   .chip{padding:7px 10px}
+  .log-toggle{padding-block:8px;margin-block:-8px}
 }
