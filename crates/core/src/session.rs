@@ -14,7 +14,6 @@ use crate::findings::{analyze_logs, check_pull, Finding};
 use crate::haltech::{parse_nsp_csv, to_eng, type_info, Col};
 use crate::log::Log;
 use crate::stats::median;
-use crate::switches::{switches, MAX_SWITCHES};
 use crate::table::{axes, bin_table, Table};
 
 pub enum Reply {
@@ -465,13 +464,6 @@ impl Session {
                 let log = self.log(arg_str(&args, "log")?)?;
                 let (t0, t1) = (arg_f64(&args, "t0")?, arg_f64(&args, "t1")?);
                 ok(serde_json::to_value(chips(log, t0, t1)).map_err(|e| e.to_string())?)
-            }
-            // the UI's switch rows still ask for this; it goes when they do
-            "switches" => {
-                let log = self.log(arg_str(&args, "log")?)?;
-                let (t0, t1) = (arg_f64(&args, "t0")?, arg_f64(&args, "t1")?);
-                ok(serde_json::to_value(switches(log, t0, t1, MAX_SWITCHES))
-                    .map_err(|e| e.to_string())?)
             }
             "get_settings" => {
                 let v = self

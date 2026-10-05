@@ -1,20 +1,8 @@
 // The app: loads the library from the core, renders the panels and wires the controls.
 
 import { api, inTauri, isMobile, onLogsChanged, pickFolder } from './api';
-import {
-  atRunRpm,
-  draw3d,
-  drawDyno,
-  drawTraces,
-  dropTraceCache,
-  dynoHover,
-  switchAt,
-  switchRowAt,
-  t3Hover,
-  tableScale,
-  trX,
-  traceLayout,
-} from './charts';
+import { atRunRpm, draw3d, drawDyno, drawTraces, dropTraceCache, dynoHover, t3Hover, tableScale, trX, traceLayout } from './charts';
+import { updateChips } from './chips';
 import { atRpm, buildLog, chanMeta, clamp, fixTable, valAt } from './data';
 import { clearMessage, fail, progress, say, wireMessages } from './messages';
 import {
@@ -35,6 +23,7 @@ import {
   VEH_DEFAULT,
   VEH_IDS,
   chInfo,
+  chipsKey,
   copyView,
   css,
   curTable,
@@ -54,7 +43,6 @@ import {
   resetTheme,
   series,
   showTip,
-  switchKey,
   theme,
 } from './state';
 import type { TipRow } from './state';
@@ -89,7 +77,7 @@ function collectSettings(): Settings {
     working: S.rview,
     names: S.names,
     watchDir: S.watchDir,
-    switches: S.swShow,
+    switches: S.chipsShow,
   };
 }
 function writeSettings(): void {
@@ -1039,62 +1027,71 @@ function updateGridNow(): void {
   }
 }
 
-// ---------- switch rows ----------
+// ---------- switch and state chips ----------
 
-let swKey = '';
-let swSeq = 0;
-/** How the message starts while a request for switch rows has failed. */
-const SW_FAILED = 'Switch rows failed: ';
+let chipsAsked = '';
+let chipsSeq = 0;
+/** How the message starts while a request for chips has failed. */
+const CHIPS_FAILED = 'Switches and states failed: ';
 
 /**
- * Ask the core for the switch rows of the span on screen. Runs on every draw and asks once per span.
- * A failed request is not retried until the span, the log or "Show switches that change" changes,
- * or Try again asks for it (`retrySwitches`): retrying here would send a request on every frame while the replay plays.
+ * Ask the core for the chips of the span on screen. Runs on every draw and asks once per span.
+ * A failed request is not retried until the span, the log or "Show switches and states that change" changes, or Try again:
+ * retrying here would send a request on every frame while the replay plays.
  */
-function syncSwitches(): void {
+function syncChips(): void {
   const f = S.focus;
-  const span = f && S.swShow ? replaySpan(f) : null;
-  const key = f && span ? switchKey(f) : '';
-  if (key === swKey) return;
-  swKey = key;
-  const seq = ++swSeq;
-  // rows for another span must not be drawn against this one while the new rows are on their way
-  S.sw = null;
-  S.swFor = '';
-  S.swHover = null;
+  const key = f && S.chipsShow ? chipsKey(f) : '';
+  if (key === chipsAsked) return;
+  chipsAsked = key;
+  const seq = ++chipsSeq;
+  // chips for another span must not be shown for this one while the new chips are on their way
+  S.chips = null;
+  S.chipsFor = '';
   S.rev++;
-  if (!f || !span) return;
-  api.switches(f.log.key, span[0], span[1]).then(
-    rows => {
-      if (seq !== swSeq) return;
-      S.sw = rows;
-      S.swFor = key;
+  if (!f || !key) {
+    // the setting is off or there is no log: an earlier failure no longer holds
+    clearMessage(CHIPS_FAILED);
+    return;
+  }
+  const [t0, t1] = replaySpan(f);
+  api.chips(f.log.key, t0, t1).then(
+    c => {
+      if (seq !== chipsSeq) return;
+      S.chips = c;
+      S.chipsFor = key;
       S.rev++;
-      // an earlier failure no longer holds once rows arrive; any other message stays
-      clearMessage(SW_FAILED);
+      // an earlier failure no longer holds once chips arrive; any other message stays
+      clearMessage(CHIPS_FAILED);
       drawAll();
     },
     e => {
-      if (seq === swSeq) fail(SW_FAILED + errText(e), { label: 'Try again', run: retrySwitches });
+      if (seq === chipsSeq) fail(CHIPS_FAILED + errText(e), { label: 'Try again', run: retryChips });
     },
   );
 }
-/** Ask again for the rows of the span on screen, after a request for them failed. */
-function retrySwitches(): void {
-  swKey = '';
+/** Ask again for the chips of the span on screen, after a request for them failed. */
+function retryChips(): void {
+  chipsAsked = '';
   drawAll();
 }
 
 // ---------- frame loop ----------
 
+/** The replay's chips and traces. Both show the span in S.focus, so neither is drawn without the other. */
+function drawReplay(): void {
+  updateChips();
+  drawTraces();
+}
+
 function drawAll(): void {
-  syncSwitches();
+  syncChips();
   syncTransport();
   updateReadouts();
   drawDyno();
   draw3d();
   updateGridNow();
-  drawTraces();
+  drawReplay();
   updatePicker(performance.now());
 }
 
@@ -1339,7 +1336,7 @@ function wire(): void {
   input('pick-q').addEventListener('input', filterPicker);
   input('pick-chg').addEventListener('change', filterPicker);
   input('pick-sw').addEventListener('change', () => {
-    S.swShow = input('pick-sw').checked;
+    S.chipsShow = input('pick-sw').checked;
     saveSettings();
     drawAll();
   });
@@ -1429,7 +1426,6 @@ function wire(): void {
       /* capture is a nicety */
     }
     S.hoverX = null;
-    S.swHover = null;
     hideTip();
     scrub(e);
     drawAll();
@@ -1444,19 +1440,6 @@ function wire(): void {
     }
     if (e.pointerType === 'touch') return;
     const x = trX(e);
-    const k = switchRowAt(e);
-    S.swHover = k;
-    if (k !== null) {
-      // on a switch row: what it reads there and its other names, with its changes marked through the traces
-      const row = L.rows[k];
-      S.hoverX = null;
-      showTip(e.clientX, e.clientY, row.name, [
-        { label: (x - L.x0).toFixed(2) + ' s', value: switchAt(row, x) },
-        ...row.also.map(name => ({ label: 'Also logged as', value: name })),
-      ]);
-      drawTraces();
-      return;
-    }
     const th = theme();
     const log = S.focus.log;
     const rows: TipRow[] = [];
@@ -1473,7 +1456,7 @@ function wire(): void {
         });
     }
     showTip(e.clientX, e.clientY, L.rpmMode ? fmt(Math.round(x / 10) * 10) + ' rpm' : (x - L.x0).toFixed(2) + ' s', rows);
-    drawTraces();
+    drawReplay();
   });
   const endScrub = () => {
     scrubbing = false;
@@ -1482,9 +1465,8 @@ function wire(): void {
   tc.addEventListener('pointercancel', endScrub);
   tc.addEventListener('pointerleave', () => {
     S.hoverX = null;
-    S.swHover = null;
     hideTip();
-    drawTraces();
+    drawReplay();
   });
 
   // 3D table: drag or arrow keys to rotate
@@ -1669,9 +1651,9 @@ export async function boot(): Promise<void> {
   else S.rview = copyView(S.viewName === 'Default' ? DEFAULT_VIEW : S.views[S.viewName]);
   input('view-name').value = S.viewName === 'Default' ? '' : S.viewName;
   S.watchDir = typeof st.watchDir === 'string' ? st.watchDir : '';
-  // on unless it was turned off: settings saved before the switch rows existed have no entry
-  S.swShow = st.switches !== false;
-  input('pick-sw').checked = S.swShow;
+  // on unless it was turned off: settings saved before the setting existed have no entry
+  S.chipsShow = st.switches !== false;
+  input('pick-sw').checked = S.chipsShow;
   settingsReady = true;
   renderWatch();
   renderViewSel();

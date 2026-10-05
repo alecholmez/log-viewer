@@ -156,7 +156,7 @@ export interface DynoOut {
 }
 
 /**
- * One row of the replay's switch rows: a group of on/off channels that are one signal over the whole log, shown because
+ * One switch chip of the replay: a group of on/off channels that are one signal over the whole log, shown because
  * its named channel changes inside the span. Everything but `also` comes from the named channel alone.
  * Times are log seconds, clipped to the span.
  */
@@ -238,6 +238,6 @@ export interface Settings {
   working?: View;
   names?: { logs: Record<string, string>; pulls: Record<string, string> };
   watchDir?: string;
-  /** "Show switches that change" in the Channels picker; on unless this is false */
+  /** "Show switches and states that change" in the Channels picker; on unless this is false */
   switches?: boolean;
 }

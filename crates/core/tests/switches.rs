@@ -1,4 +1,4 @@
-//! The replay's switch rows, through the `switches` command the UI calls, on the sample logs.
+//! The switches in the replay's chips, through the `chips` command the UI calls, on the sample logs.
 
 mod common;
 
@@ -6,8 +6,9 @@ use common::{call, default_pull, log_key, pull, sample_session, PULL_PAD};
 use logviewer_core::Session;
 use serde_json::{json, Value};
 
+/// The switches part of the chips for a span: `{ rows, more }`.
 fn rows(s: &mut Session, log: &str, t0: f64, t1: f64) -> Value {
-    call(s, "switches", json!({ "log": log, "t0": t0, "t1": t1 })).unwrap()
+    call(s, "chips", json!({ "log": log, "t0": t0, "t1": t1 })).unwrap()["switches"].clone()
 }
 
 fn names(reply: &Value) -> Vec<&str> {
@@ -263,30 +264,4 @@ fn the_same_span_gives_the_same_answer_every_time() {
     // another span in between: the groups found for the log are kept, the rows are not
     rows(&mut s, &log, 0.0, 10.0);
     assert_eq!(rows(&mut s, &log, t0, t1), first);
-}
-
-#[test]
-fn a_request_that_cannot_be_answered_says_why() {
-    let Some(mut s) = sample_session() else {
-        return;
-    };
-    let log = log_key(&mut s, "PCLog_2026-04-17_0145pm.csv");
-    let err = |s: &mut Session, args: Value| call(s, "switches", args).unwrap_err();
-    assert_eq!(
-        err(&mut s, json!({ "t0": 0.0, "t1": 1.0 })),
-        "missing argument: log"
-    );
-    assert_eq!(
-        err(&mut s, json!({ "log": log, "t1": 1.0 })),
-        "missing argument: t0"
-    );
-    // JSON has no NaN: the UI's NaN arrives as null
-    assert_eq!(
-        err(&mut s, json!({ "log": log, "t0": 0.0, "t1": null })),
-        "missing argument: t1"
-    );
-    assert_eq!(
-        err(&mut s, json!({ "log": "gone", "t0": 0.0, "t1": 1.0 })),
-        "That log is not loaded."
-    );
 }

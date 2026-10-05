@@ -4,7 +4,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { Chips, DynoOut, LogMeta, Overview, Settings, Switches, Vehicle } from './types';
+import type { Chips, DynoOut, LogMeta, Overview, Settings, Vehicle } from './types';
 
 export const inTauri = '__TAURI_INTERNALS__' in window;
 
@@ -40,11 +40,6 @@ export const api = {
   scanDir: (path: string) => call<{ added: string[]; errors: string[] }>('scan_dir', { path }),
   overview: () => call<Overview>('overview'),
   dyno: (vehicle: Vehicle, runs: (string | null)[]) => call<DynoOut>('dyno', { vehicle, runs }),
-  /**
-   * on/off channels that change between t0 and t1 (seconds in the log), one row per signal, in order of first change.
-   * A span with t0 after t1 answers no rows. An `on` span that starts on the last sample of the span has zero length.
-   */
-  switches: (log: string, t0: number, t1: number) => call<Switches>('switches', { log, t0, t1 }),
   /**
    * The switches and the states that change between t0 and t1 (seconds in the log), each in order of first change and
    * each cut at the core's limit. A span with t0 after t1 answers none of either.

@@ -72,35 +72,44 @@ try {
       return v ? +window.__contrast(v, s.getPropertyValue('--surface')).toFixed(2) : 0;
     }, name);
 
-  // geometry of the trace canvas, as in src/charts.ts: TG for the traces, SW for the switch rows under them
-  const TG = { l: 46, r: 92, lab: 17, ph: 53, gap: 6 };
-  const SW = { top: 10, lab: 14, bar: 8, gap: 4 };
-  const swPitch = SW.lab + SW.bar + SW.gap;
-  /** The replay as it stands: the span, the switch rows and what they read, and where the canvas puts them. */
+  // geometry of the trace canvas, as in src/charts.ts: TG for the traces and the band of ticks above the time axis
+  const TG = { l: 46, r: 92, lab: 17, gap: 6, ticks: 12, axis: 22 };
+  /** The replay as it stands: the span, the core's chips, the chips on screen and what they read, the canvas and its plot height. */
   const replay = page =>
-    page.evaluate(
-      ([l, r, pitch, gap]) => {
-        const s = window.__logViewer;
-        const traces = (s.fview || s.rview).traces.length;
-        return {
-          log: s.focus.log.name,
-          w0: s.focus.w0,
-          w1: s.focus.w1,
-          rows: s.sw ? s.sw.rows : null,
-          more: s.sw ? s.sw.more : null,
-          now: (s.swNow || []).join(),
-          height: document.getElementById('tr-wrap').offsetHeight,
-          note: document.getElementById('tr-note').textContent,
-          pw: document.getElementById('tr-cv').clientWidth - l - r,
-          bandY: traces * pitch - gap,
-        };
-      },
-      [TG.l, TG.r, TG.lab + TG.ph + TG.gap, TG.gap],
-    );
-  /** x on the canvas of a time in the span, and y of the middle of row k's bar. */
+    page.evaluate(TG => {
+      const s = window.__logViewer;
+      const traces = (s.fview || s.rview).traces.length;
+      const height = document.getElementById('tr-wrap').offsetHeight;
+      const chips = [...document.querySelectorAll('#chips .chip')];
+      const name = c => c.querySelector('.nm').textContent;
+      return {
+        log: s.focus.log.name,
+        w0: s.focus.w0,
+        w1: s.focus.w1,
+        chips: s.chips,
+        names: chips.map(name).join(),
+        now: chips.map(c => c.querySelector('.vl').textContent).join(),
+        titles: chips.map(c => c.title),
+        on: chips
+          .filter(c => c.classList.contains('on'))
+          .map(name)
+          .join(),
+        pressed: chips
+          .filter(c => c.getAttribute('aria-pressed') === 'true')
+          .map(name)
+          .join(),
+        traces,
+        height,
+        ph: (height - 4 - TG.axis - TG.ticks) / traces - TG.lab - TG.gap,
+        note: document.getElementById('tr-note').textContent,
+        pw: document.getElementById('tr-cv').clientWidth - TG.l - TG.r,
+      };
+    }, TG);
+  /** x on the canvas of a time in the span; y of the top of trace k's plot; y of the time axis. */
   const xAt = (r, t) => TG.l + ((t - r.w0) / (r.w1 - r.w0)) * r.pw;
-  const barY = (r, k) => r.bandY + SW.top + k * swPitch + SW.lab + SW.bar / 2;
-  /** Put the playhead at t and redraw: pressing By time redraws and moves nothing. Returns what the rows read there. */
+  const plotTop = (r, k) => k * (TG.lab + r.ph + TG.gap) + TG.lab;
+  const axisY = r => r.traces * (TG.lab + r.ph + TG.gap) - TG.gap + TG.ticks;
+  /** Put the playhead at t and redraw: pressing By time redraws and moves nothing. Returns what the chips read there. */
   const playhead = async (page, t) => {
     await page.evaluate(t => (window.__logViewer.t = t), t);
     await page.click('[data-xmode="time"]');
@@ -124,7 +133,21 @@ try {
       () => true,
       () => false,
     );
-  const rowsShown = (page, n) => until(page, n => window.__logViewer.swNow?.length === n, n);
+  const chipsShown = (page, n) => until(page, n => document.querySelectorAll('#chips .chip').length === n, n);
+  /** Click the chip with this exact name. False when there is none. */
+  const clickChip = async (page, name) => {
+    const chip = page.locator('#chips .chip').filter({ has: page.getByText(name, { exact: true }) });
+    if (!(await chip.count())) return false;
+    await chip.first().click();
+    return true;
+  };
+  // the chips of the default pull and of the whole Back road log (the 1:45 pm log, renamed above), as the core orders them
+  const DEFAULT_CHIPS =
+    'Decel Detected,Drive By Wire 1 Pin 1 Output State,Clutch State,Gear Upshift State,Stepper 1 Pin 2 Output State,Predicted MAP Active,' +
+    'Drive By Wire Throttle Motor Direction,Engine State,Idle Control State,Ignition Active Table,Gear,Traction Control State,Manifold Pressure Filter Scale';
+  const WHOLE_CHIPS =
+    'Stepper 1 Pin 2 Output State,Predicted MAP Active,Drive By Wire 1 Pin 1 Output State,Clutch State,Decel Detected,Gear Upshift State,AVI1 Switch State,Brake Pedal State,' +
+    'Manifold Pressure Filter Scale,Drive By Wire 1 Pin 2 Output State,Engine State,Ignition Active Table,Idle Control State,Gear,Start Button Next Expected Action Channel,Launch Control State';
 
   // empty library
   let page = await open();
@@ -487,114 +510,149 @@ try {
   await page.click('[data-xmode="time"]');
   await shot(page, '06-replay', true);
 
-  // switch rows, drawn from rows put in by hand so that every case is on screen: on, off, no samples, rows left out.
-  // The 1:42 pm log has no switch that changes, so nothing else is drawn under its traces.
+  // switch and state chips. Channels is closed for these checks: with it closed the replay fits the window at every span below
+  if (await page.isVisible('#picker')) await page.click('#chan-btn');
+  // the 1:42 pm log has no switch that changes, and one state that does
   await page.locator('.log-head', { hasText: '1:42 pm log' }).locator('button', { hasText: 'Replay' }).click();
-  await settle(page);
+  await chipsShown(page, 1);
   const bare = await replay(page);
-  // the core's own (empty) answer for this span says which span rows are for; hand-made rows are put in for that span
-  await until(page, () => window.__logViewer.swFor !== '');
-  const realFor = await page.evaluate(() => window.__logViewer.swFor);
-  const putRows = more =>
+  check(
+    'a log with a state and no switch shows a chip for the state',
+    bare.names === 'Idle Control State' && !/ more /.test(bare.note),
+    bare.names + ' | ' + bare.note,
+  );
+  // chips put in by hand for the same span, so that every case is on screen: on, off, no samples, a state, chips left out
+  const putChips = (swMore, stMore) =>
     page.evaluate(
-      ([more, realFor]) => {
+      ([swMore, stMore]) => {
         const s = window.__logViewer;
-        s.sw = {
-          rows: [
-            {
-              name: 'Clutch',
-              also: ['Clutch Input'],
-              // the second on span is 10 ms of an 18 s span: less than a pixel wide
-              on: [
-                [4, 8],
-                [14, 14.01],
-              ],
-              gaps: [[10, 12]],
-              changes: [4, 8, 14, 14.01],
-            },
-            { name: 'Fan', also: [], on: [[0, s.focus.w1]], gaps: [], changes: [] },
-          ],
-          more,
+        const end = s.focus.w1;
+        s.chips = {
+          switches: {
+            rows: [
+              // the second on span is 10 ms of an 18 s span
+              {
+                name: 'Clutch',
+                also: ['Clutch Input', 'AVI6'],
+                on: [
+                  [4, 8],
+                  [14, 14.01],
+                ],
+                gaps: [[10, 12]],
+                changes: [4, 8, 14, 14.01],
+              },
+              { name: 'Fan', also: [], on: [[0, end]], gaps: [], changes: [0] },
+            ],
+            more: swMore,
+          },
+          states: {
+            // the last section starts on the last sample of the span and has no length
+            rows: [
+              {
+                name: 'Gear',
+                sections: [
+                  [0, 5, 1],
+                  [5, 9, 2],
+                  [9, end, -1],
+                  [end, end, 4],
+                ],
+                gaps: [[15, 16]],
+                changes: [5, 9, end],
+              },
+            ],
+            more: stMore,
+          },
         };
-        s.swFor = realFor; // the rows are for the span on screen
-        s.rev++;
+        s.rev++; // they are for the span on screen: chipsFor already names it
       },
-      [more, realFor],
+      [swMore, stMore],
     );
-  await putRows(2);
-  const read = [await playhead(page, 2), await playhead(page, 6), await playhead(page, 11)].join(' | ');
-  check('a switch row reads On, Off, or a dash where there are no samples', read === 'Off,On | On,On | –,On', read);
-  await playhead(page, 15); // clear of the pixels read next
+  await putChips(2, 1);
+  const read = [
+    await playhead(page, 2),
+    await playhead(page, 6),
+    await playhead(page, 11),
+    await playhead(page, 15.5),
+    await playhead(page, bare.w1),
+  ].join(' | ');
+  check(
+    'a chip reads On or Off, a state its value, a dash where there are no samples, and at the end of the span its last section',
+    read === 'Off,On,1 | On,On,2 | –,On,-1 | Off,On,– | Off,On,4',
+    read,
+  );
   let drawn = await replay(page);
   check(
-    'two rows add their height under the traces',
-    drawn.height === bare.height + SW.top + 2 * swPitch,
-    bare.height + ' -> ' + drawn.height,
+    'a switch chip has a dot that is filled while it is on, and its other names in its title',
+    drawn.names === 'Clutch,Fan,Gear' && drawn.on === 'Fan' && drawn.titles.join('|') === 'Also logged as Clutch Input, AVI6||',
+    JSON.stringify([drawn.names, drawn.on, drawn.titles]),
   );
-  const [ink2, grid] = [await token(page, '--ink-2'), await token(page, '--grid')];
-  const bar = [];
-  for (const t of [6, 2, 11]) bar.push(await pixel(page, xAt(drawn, t), barY(drawn, 0)));
-  check(
-    'the bar is filled while the switch is on, plain while it is off and empty where there are no samples',
-    sameColour(bar[0], ink2) && sameColour(bar[1], grid) && bar[2][3] === 0,
-    JSON.stringify(bar),
-  );
-  const brief = await pixel(page, Math.floor(xAt(drawn, 14)), barY(drawn, 0));
-  check('a switch that is on for one sample still shows', sameColour(brief, ink2), JSON.stringify(brief));
-  check(
-    'the note says how many switches are left out',
-    / 2 more switches change in this span and are not shown\.$/.test(drawn.note),
-    drawn.note,
-  );
-  await putRows(1);
-  await playhead(page, 15);
+  check('the note counts the chips left out', / 3 more change in this span and are not shown\.$/.test(drawn.note), drawn.note);
+  await putChips(1, 0);
+  await playhead(page, 6);
   drawn = await replay(page);
-  check('and counts one switch as one', / 1 more switch changes in this span and is not shown\.$/.test(drawn.note), drawn.note);
-  await shot(page, '06b-switch-rows', true);
-  await page.click('[data-xmode="rpm"]');
-  drawn = await replay(page);
+  check('and counts one as one', / 1 more changes in this span and is not shown\.$/.test(drawn.note), drawn.note);
+  check('the trace canvas keeps its height with chips', drawn.height === bare.height, bare.height + ' -> ' + drawn.height);
+  await shot(page, '06b-chips', true);
+  // the rows under the traces are gone: pointing under the last trace shows the values tooltip, nothing about a switch
+  await page.locator('#tr-cv').hover({ position: { x: xAt(drawn, 6), y: axisY(drawn) - 4 } });
+  const tip = await page.evaluate(() => (document.getElementById('tip').hidden ? '' : document.getElementById('tip').innerText));
+  const rowState = await page.evaluate(() => ['sw', 'swNow', 'swHover'].filter(k => k in window.__logViewer).join());
+  await page.mouse.move(0, 0);
   check(
-    'By RPM hides the rows and says so',
-    drawn.height === bare.height && drawn.now === '' && / By RPM hides the switch rows\.$/.test(drawn.note),
-    JSON.stringify([drawn.height, drawn.now, drawn.note]),
+    'no switch rows, and no tooltip of their own',
+    rowState === '' && /^\d+\.\d\d s\n/.test(tip) && !/Also logged as/.test(tip),
+    JSON.stringify([rowState, tip]),
   );
-  await page.click('[data-xmode="time"]');
   await page.evaluate(() => {
     const s = window.__logViewer;
-    s.sw = null;
+    s.chips = null;
     s.rev++;
   });
   await page.click('[data-xmode="time"]');
   drawn = await replay(page);
-  check('with no rows the traces take the height they had', drawn.height === bare.height && drawn.now === '', String(drawn.height));
-
-  // switch rows from the core. The default pull is run A already, so make another pull run A and come back: that focuses it.
-  const asked = [];
-  page.on('request', q => /\/api\/switches$/.test(q.url()) && asked.push(JSON.parse(q.postData())));
-  await page.locator('.pull', { hasText: '3rd gear · 2,974' }).locator('button.r0').click();
-  // the rows put in by hand were taken out above, so rows here are the core's answer for that pull
-  await until(page, () => window.__logViewer.sw !== null);
-  await page.locator('.pull', { hasText: '2,551–5,959' }).locator('button.r0').click();
-  await rowsShown(page, 6);
-  let pull = await replay(page);
-  const names = (pull.rows || []).map(r => r.name);
   check(
-    'the default pull shows the switches that change in it, in order of first change',
-    names.join() ===
-      'Decel Detected,Drive By Wire 1 Pin 1 Output State,Clutch State,Gear Upshift State,Stepper 1 Pin 2 Output State,Predicted MAP Active' &&
-      pull.height === bare.height + SW.top + 6 * swPitch,
-    names.join() + ' ' + pull.height,
+    'with no chips none are shown, and the traces keep their height',
+    drawn.names === '' && drawn.height === bare.height,
+    String(drawn.height),
   );
-  // the clutch is the third row; its second change is the pedal coming back up
-  const up = pull.rows?.[2]?.changes[1] ?? 0;
-  const flip = [await playhead(page, up - 0.1), await playhead(page, up + 0.1)].map(now => now.split(',')[2]);
-  check('the readout flips as the playhead crosses a change', flip.join() === 'On,Off', flip.join());
-  await shot(page, '06c-switch-rows-pull', true);
-  await page.click('#play');
-  await page.waitForTimeout(400);
-  await page.click('#play');
+
+  // chips from the core. The default pull is run A already, so make another pull run A and come back: that focuses it.
+  const asked = [];
+  page.on('request', q => /\/api\/chips$/.test(q.url()) && asked.push(JSON.parse(q.postData())));
+  await page.locator('.pull', { hasText: '3rd gear · 2,974' }).locator('button.r0').click();
+  await until(page, () => window.__logViewer.chips !== null);
+  await page.locator('.pull', { hasText: '2,551–5,959' }).locator('button.r0').click();
+  await chipsShown(page, 13);
+  let pull = await replay(page);
   check(
-    'the rows are asked for once for each span, not on every frame',
+    'the default pull shows its switches, then its states, each in order of first change',
+    pull.names === DEFAULT_CHIPS && pull.height === bare.height,
+    pull.names + ' ' + pull.height,
+  );
+  check('and leaves none out, so the note says nothing about them', !/ more /.test(pull.note), pull.note);
+  check(
+    'a switch logged under other names carries them in its title',
+    pull.titles[2] === 'Also logged as AVI6 Switch State, Clutch Switch Input State' &&
+      pull.titles[4] === 'Also logged as Cam Control Switched Output State Intake',
+    JSON.stringify(pull.titles),
+  );
+  const chipInk = await textContrast(page, '#chips .chip');
+  check('the text of every chip reads on it', chipInk.length === 13 && chipInk[0] >= 4.5, JSON.stringify(chipInk));
+  const two = [await playhead(page, 30.3), await playhead(page, 33)];
+  check(
+    'the chips read the playhead',
+    two[0] === 'On,Off,On,Off,Off,Off,1,2,-3,2,1,0,1' && two[1] === 'Off,On,Off,Off,On,Off,2,3,-7,0,2,0,1',
+    two.join(' | '),
+  );
+  await shot(page, '06c-chips-pull', true);
+  // a chip flips while the replay plays: the cam output, the fifth chip, comes on at 32.579 s
+  const before = (await playhead(page, 32.4)).split(',')[4];
+  await page.click('#play');
+  const flipped = await until(page, () => document.querySelectorAll('#chips .chip .vl')[4]?.textContent === 'On');
+  await page.click('#play');
+  check('a chip flips while the replay plays', before === 'Off' && flipped, JSON.stringify([before, flipped]));
+  check(
+    'the chips are asked for once for each span, not on every frame',
     asked.length === 2 && asked[1].t0 === pull.w0 && asked[1].t1 === pull.w1,
     JSON.stringify(asked),
   );
@@ -603,15 +661,11 @@ try {
   await page.click('[data-xmode="time"]');
   pull = await replay(page);
   check(
-    'By RPM hides them, and By time shows them again without asking again',
-    byRpm.now === '' &&
-      byRpm.height === bare.height &&
-      / By RPM hides the switch rows\.$/.test(byRpm.note) &&
-      pull.now.split(',').length === 6 &&
-      asked.length === 2,
-    JSON.stringify([byRpm.now, byRpm.height, byRpm.note, pull.now, asked.length]),
+    'By RPM: the chips still read at the playhead, and nothing is asked again',
+    byRpm.names === DEFAULT_CHIPS && byRpm.now === pull.now && byRpm.height === bare.height && asked.length === 2,
+    JSON.stringify([byRpm.now, pull.now, byRpm.height, asked.length]),
   );
-  // the rows follow the span on screen, whatever set it: narrow the span by hand and they are asked for again
+  // the chips follow the span on screen, whatever set it: narrow the span by hand and they are asked for again
   await page.evaluate(() => {
     const s = window.__logViewer;
     s.focus.w0 += 2;
@@ -619,35 +673,32 @@ try {
     s.rev++;
   });
   await page.click('[data-xmode="time"]');
-  await rowsShown(page, 2);
+  await chipsShown(page, 3);
   const narrow = await replay(page);
   check(
-    'the rows follow the span on screen when it changes',
+    'the chips follow the span on screen when it changes',
     asked.length === 3 &&
       asked[2].t0 === narrow.w0 &&
       asked[2].t1 === narrow.w1 &&
-      (narrow.rows || []).map(r => r.name).join() === 'Stepper 1 Pin 2 Output State,Predicted MAP Active',
-    JSON.stringify([asked.length, asked[2], (narrow.rows || []).map(r => r.name)]),
+      narrow.names === 'Stepper 1 Pin 2 Output State,Predicted MAP Active,Traction Control State' &&
+      !/ more /.test(narrow.note),
+    JSON.stringify([asked.length, asked[2], narrow.names]),
   );
-  // across the whole log the clutch channels part by a sample at a few changes; they are still one row
+  // across the whole log the clutch channels part by a sample at a few changes; they are still one chip
   await page.locator('.log-head', { hasText: 'Back road' }).locator('button', { hasText: 'Replay' }).click();
-  await rowsShown(page, 8);
+  await chipsShown(page, 16);
   const whole = await replay(page);
-  const wholeNames = (whole.rows || []).map(r => r.name).join();
   check(
-    'a whole log shows the clutch once among its eight rows, and no note when none is left out',
-    wholeNames ===
-      'Stepper 1 Pin 2 Output State,Predicted MAP Active,Drive By Wire 1 Pin 1 Output State,Clutch State,Decel Detected,Gear Upshift State,AVI1 Switch State,Brake Pedal State' &&
-      whole.more === 0 &&
-      !/ more switch/.test(whole.note),
-    wholeNames + ' ' + whole.more + ' ' + whole.note,
+    'a whole log shows the clutch once among its switches, the states that change least, and counts the rest',
+    whole.names === WHOLE_CHIPS && / 2 more change in this span and are not shown\.$/.test(whole.note) && whole.height === bare.height,
+    whole.names + ' | ' + whole.note + ' | ' + whole.height,
   );
 
-  // while the dyno call for a new run A is on its way, a hover redraws the traces: rows of the old span must not appear
+  // while the dyno call for a new run A is on its way, a hover redraws the traces: chips of the old span must not appear
   let release;
   const gate = new Promise(r => (release = r));
-  // the core's answer for the new span is held too, so only rows of the old span could be on screen
-  await page.route(/\/api\/(dyno|switches)$/, async route => {
+  // the core's answer for the new span is held too, so only chips of the old span could be on screen
+  await page.route(/\/api\/(dyno|chips)$/, async route => {
     await gate;
     await route.continue().catch(() => {}); // unrouting below may have let it through already
   });
@@ -656,83 +707,88 @@ try {
   await page.mouse.move(130, 30);
   const mid = await replay(page);
   check(
-    'rows of the previous span are not drawn while the new run is loading',
-    (mid.rows?.length ?? 0) === 0 && mid.now === '' && mid.height === bare.height,
-    JSON.stringify([mid.rows?.length, mid.now, mid.height]),
+    'chips of the previous span are not shown while the new run is loading',
+    mid.names === '' && mid.height === bare.height,
+    JSON.stringify([mid.names, mid.height]),
   );
   release();
-  await page.unroute(/\/api\/(dyno|switches)$/);
+  await page.unroute(/\/api\/(dyno|chips)$/);
   await page.waitForTimeout(600);
 
-  // an answer that arrives after the user has moved to another span must not be drawn against that span
+  // an answer that arrives after the user has moved to another span must not be shown for that span
   let held = 0;
-  await page.route('**/api/switches', async route => {
+  await page.route('**/api/chips', async route => {
     if (!held++) await new Promise(r => setTimeout(r, 800));
     await route.continue();
   });
   await page.locator('.log-head', { hasText: '1:44 pm log' }).locator('button', { hasText: 'Replay' }).click();
   await page.locator('.log-head', { hasText: '1:42 pm log' }).locator('button', { hasText: 'Replay' }).click();
   await page.waitForTimeout(1200);
-  await page.unroute('**/api/switches');
+  await page.unroute('**/api/chips');
   const late = await replay(page);
   check(
-    'rows that arrive late for another span are dropped',
-    late.log === 'PCLog_2026-04-17_0142pm.csv' && late.rows?.length === 0 && late.height === bare.height,
-    JSON.stringify([late.log, late.rows?.length, late.height]),
+    'chips that arrive late for another span are dropped',
+    late.log === 'PCLog_2026-04-17_0142pm.csv' && late.names === 'Idle Control State',
+    JSON.stringify([late.log, late.names]),
   );
 
-  // the checkbox in Channels turns the rows off without asking the core
+  // the checkbox in Channels turns the chips off without asking the core
   await page.locator('.log-head', { hasText: 'Back road' }).locator('button', { hasText: 'Replay' }).click();
-  await rowsShown(page, 8);
+  await chipsShown(page, 16);
+  if (!(await page.isVisible('#picker'))) await page.click('#chan-btn');
   const askedBefore = asked.length;
   const box = page.locator('#pick-sw');
+  const label = await page.evaluate(() => document.getElementById('pick-sw')?.parentElement.textContent.trim());
   if (await box.count()) await box.uncheck();
   const off = await replay(page);
   check(
-    'the checkbox in Channels turns the rows off',
-    (await box.count()) === 1 && off.rows === null && off.now === '' && off.height === bare.height && asked.length === askedBefore,
-    JSON.stringify([off.rows, off.now, off.height, asked.length - askedBefore]),
+    'the checkbox in Channels reads "Show switches and states that change" and turns the chips off',
+    label === 'Show switches and states that change' &&
+      off.chips === null &&
+      off.names === '' &&
+      (await page.isHidden('#chips')) &&
+      asked.length === askedBefore,
+    JSON.stringify([label, off.chips, off.names, asked.length - askedBefore]),
   );
 
-  // a failed request says so in the message area; when rows come back for the span, the message goes
+  // a failed request says so in the message area; turning the setting off clears the message, and chips come back when it is on
   const errorsBefore = errors.length;
-  await page.route('**/api/switches', route => route.abort(), { times: 1 });
+  await page.route('**/api/chips', route => route.abort(), { times: 1 });
   await box.check();
-  const failShown = await until(page, () => /^Switch rows failed: /.test(document.getElementById('status').textContent));
-  // not asked again for the same span: unticking and ticking the box asks again
+  const failShown = await until(page, () => /^Switches and states failed: /.test(document.getElementById('status').textContent));
   await box.uncheck();
+  const clearedByOff = (await text(page, 'status')) === '';
   await box.check();
-  const rowsBack = await rowsShown(page, 8);
-  const afterFail = await text(page, 'status');
+  const chipsBack = await chipsShown(page, 16);
   check(
-    'a failed request says so, and the message goes when rows arrive',
-    failShown && rowsBack && !/Switch rows failed/.test(afterFail),
-    JSON.stringify([failShown, rowsBack, afterFail]),
+    'a failed request says so, turning the setting off clears it, and the chips come back',
+    failShown && clearedByOff && chipsBack,
+    JSON.stringify([failShown, clearedByOff, chipsBack]),
   );
   // the browser reports the aborted request on the console; that one is expected
   errors.splice(errorsBefore, errors.length - errorsBefore, ...errors.slice(errorsBefore).filter(m => !/ERR_FAILED/.test(m)));
-  // rows that arrive clear only their own failure: another message stays
+  // chips that arrive clear only their own failure: another message stays
   await page.evaluate(() => (document.getElementById('status').textContent = 'Added 1 log.'));
   await box.uncheck();
   await box.check();
-  await rowsShown(page, 8);
-  check('rows that arrive leave any other message alone', (await text(page, 'status')) === 'Added 1 log.', await text(page, 'status'));
-  // Try again asks for the rows again
+  await chipsShown(page, 16);
+  check('chips that arrive leave any other message alone', (await text(page, 'status')) === 'Added 1 log.', await text(page, 'status'));
+  // Try again asks for the chips again
   await box.uncheck();
   const errorsBeforeRetry = errors.length;
-  await page.route('**/api/switches', route => route.abort(), { times: 1 });
+  await page.route('**/api/chips', route => route.abort(), { times: 1 });
   await box.check();
-  const failedAgain = await until(page, () => /^Switch rows failed: /.test(document.getElementById('status').textContent));
+  const failedAgain = await until(page, () => /^Switches and states failed: /.test(document.getElementById('status').textContent));
   const offered = await page.evaluate(() => {
     const b = document.getElementById('msg-act');
     return b && !b.hidden ? b.textContent : null;
   });
   if (offered) await page.click('#msg-act');
-  const rowsAfterRetry = await rowsShown(page, 8);
+  const chipsAfterRetry = await chipsShown(page, 16);
   check(
-    'Try again brings the rows back and clears the message',
-    failedAgain && offered === 'Try again' && rowsAfterRetry && (await text(page, 'status')) === '',
-    JSON.stringify([failedAgain, offered, rowsAfterRetry, await text(page, 'status')]),
+    'Try again brings the chips back and clears the message',
+    failedAgain && offered === 'Try again' && chipsAfterRetry && (await text(page, 'status')) === '',
+    JSON.stringify([failedAgain, offered, chipsAfterRetry, await text(page, 'status')]),
   );
   errors.splice(
     errorsBeforeRetry,
@@ -762,17 +818,18 @@ try {
     JSON.stringify(back),
   );
 
-  // the switch rows were turned off before the window closed: they stay off, and ticking the box brings them back
+  // the chips were turned off before the window closed: they stay off, and ticking the box brings them back
   const kept = await page.evaluate(() => ({
     box: document.getElementById('pick-sw')?.checked,
-    rows: window.__logViewer.sw,
-    now: window.__logViewer.swNow?.length,
+    chips: window.__logViewer.chips,
+    shown: document.querySelectorAll('#chips .chip').length,
   }));
-  check('switch rows stay off after a reload', kept.box === false && kept.rows === null && kept.now === 0, JSON.stringify(kept));
+  check('chips stay off after a reload', kept.box === false && kept.chips === null && kept.shown === 0, JSON.stringify(kept));
   await page.click('#chan-btn');
   if (await page.locator('#pick-sw').count()) await page.check('#pick-sw');
-  check('and come back when the box is ticked', await rowsShown(page, 6));
-  // a switch added as a trace is drawn as a trace and keeps its row
+  check('and come back when the box is ticked', await chipsShown(page, 13));
+  // a switch added as a trace is drawn as a trace and keeps its chip
+  const beforeTrace = await replay(page);
   await page.fill('#pick-q', 'clutch state');
   const clutchTrace = page
     .locator('#pick-list .pk:not([hidden])', { has: page.locator('.nm[title="Clutch State"]') })
@@ -780,40 +837,12 @@ try {
   await clutchTrace.click();
   const both = await replay(page);
   check(
-    'a switch added as a trace keeps its row',
-    both.height === bare.height + (TG.lab + TG.ph + TG.gap) + SW.top + 6 * swPitch && both.rows?.[2]?.name === 'Clutch State',
-    both.height + ' ' + both.rows?.[2]?.name,
+    'a switch added as a trace keeps its chip',
+    both.traces === beforeTrace.traces + 1 && both.names === beforeTrace.names && both.names.split(',')[2] === 'Clutch State',
+    JSON.stringify([both.traces, both.names]),
   );
   await clutchTrace.click();
   await page.fill('#pick-q', '');
-
-  // pointing at a row: the other names of the switch in the tooltip, and a line through the traces at each of its changes
-  const shown = await replay(page);
-  const clutch = shown.rows?.[2];
-  // one pixel under the top edge of the first trace: nothing else is drawn there
-  const lineAt = t => pixel(page, xAt(shown, t), TG.lab + 1);
-  const pointAt = y => page.locator('#tr-cv').hover({ position: { x: xAt(shown, shown.w0 + 3), y } });
-  await pointAt(barY(shown, 2));
-  const tip = await page.evaluate(() => (document.getElementById('tip').hidden ? '' : document.getElementById('tip').innerText));
-  check(
-    'pointing at a row lists the other names of the switch',
-    /^Clutch State\s[\s\S]*Also logged as\s*AVI6 Switch State\s*Also logged as\s*Clutch Switch Input State/.test(tip),
-    tip.replace(/\n/g, ' | '),
-  );
-  const lines = [];
-  for (const t of clutch?.changes ?? []) lines.push(await lineAt(t));
-  check(
-    'and draws a line through the traces at each of its changes',
-    lines.length === 4 && lines.every(p => sameColour(p, ink2)),
-    JSON.stringify(lines),
-  );
-  // the upshift row changes 45 ms after the clutch does, six pixels along
-  const other = await lineAt(shown.rows?.[3]?.changes[0] ?? 0);
-  check('no other row draws its changes', !sameColour(other, ink2), JSON.stringify(other));
-  await shot(page, '06d-switch-row-pointed');
-  await pointAt(TG.lab + 20);
-  const away = [await page.evaluate(() => window.__logViewer.swHover), await lineAt(clutch?.changes[0] ?? 0)];
-  check('the lines go when the pointer moves up to the traces', away[0] === null && !sameColour(away[1], ink2), JSON.stringify(away));
 
   // a saved smoothing level or view name the app does not know falls back to the default, also when it names something every object has
   await page.waitForTimeout(600); // let the write this page scheduled on opening finish first
@@ -1078,17 +1107,17 @@ try {
   ]) {
     page = await open({ viewport: { width, height }, colorScheme: 'dark', hasTouch: true });
     await settle(page);
-    // the default pull is on screen with its six switch rows
-    await rowsShown(page, 6);
+    // the default pull is on screen with its chips
+    await chipsShown(page, 13);
     const m = await page.evaluate(() => ({
       sw: document.documentElement.scrollWidth,
       cw: document.documentElement.clientWidth,
       rail: getComputedStyle(document.querySelector('.rail')).position,
-      rows: window.__logViewer.swNow?.length,
+      chips: document.querySelectorAll('#chips .chip').length,
     }));
     check(
-      name + ' layout fits, switch rows included',
-      m.sw <= m.cw && m.rail === (width < 860 ? 'static' : 'sticky') && m.rows === 6,
+      name + ' layout fits, chips included',
+      m.sw <= m.cw && m.rail === (width < 860 ? 'static' : 'sticky') && m.chips === 13,
       JSON.stringify(m),
     );
     const darkA = await textContrast(page, '.ab button.r0[aria-pressed="true"]');

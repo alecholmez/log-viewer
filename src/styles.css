@@ -84,8 +84,8 @@ h3{font-size:12.5px;font-weight:700;color:var(--ink-2);margin:12px 0 8px}
 .hint,.note,.fhead,.finding li,.finding .why,.empty p{text-wrap:pretty}
 .meta,.note,.finding li{font-weight:400}
 .btn{font:inherit;font-size:13px;font-weight:400;color:var(--ink);background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:6px 11px;cursor:pointer;line-height:1.2}
-.btn,.seg button,.ab button,.icon-btn,.finding summary{transition:background-color .14s,border-color .14s,color .14s,opacity .14s,transform .14s}
-.btn:active:not(:disabled),.seg button:active,.ab button:active{transform:translateY(1px)}
+.btn,.seg button,.ab button,.icon-btn,.finding summary,.chip{transition:background-color .14s,border-color .14s,color .14s,opacity .14s,transform .14s}
+.btn:active:not(:disabled),.seg button:active,.ab button:active,.chip:active{transform:translateY(1px)}
 .btn:hover{background:var(--inset)}
 .btn.primary{background:var(--primary);color:var(--on-primary);border-color:var(--primary);font-weight:700}
 .btn.primary:hover{opacity:.88;background:var(--primary)}
@@ -235,6 +235,15 @@ table{border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:13px}
 .ro .lb{font-size:11.5px;color:var(--ink-2);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ro .vl{font-family:var(--font-display);font-weight:700;font-size:21px;line-height:1.2;letter-spacing:-.01em;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ro .vl small{font-size:11.5px;font-weight:400;letter-spacing:0;color:var(--ink-2);margin-left:3px}
+/* switch and state chips under the cards: a name and what it reads at the playhead. The value keeps a width, so the
+   chips do not reflow as it changes; a switch leads with a dot that is filled while it is on */
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.chip{display:inline-flex;align-items:center;gap:6px;max-width:100%;min-width:0;font:inherit;font-size:12.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:3px 9px;cursor:pointer;white-space:nowrap}
+.chip:hover{background:var(--inset)}
+.chip .nm{overflow:hidden;text-overflow:ellipsis}
+.chip .vl{display:inline-block;min-width:3ch;font-family:var(--font-display);font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+.chip .dot{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--ink-2);flex:none}
+.chip.on .dot{background:var(--ink-2)}
 
 #tip{position:fixed;z-index:20;pointer-events:none;background:var(--surface);color:var(--ink);border:1px solid var(--rule);border-radius:8px;padding:7px 9px;font-size:12px;font-variant-numeric:tabular-nums;max-width:280px}
 #tip .th{color:var(--ink-2);margin-bottom:3px}

@@ -1,27 +1,10 @@
 // Canvas drawing: the power chart, the replay traces and the 3D table.
 
+import { chipsNote } from './chips';
 import { atRpm, clamp, curveAtTime, idxAt, quant, valAt } from './data';
-import {
-  $,
-  RUN,
-  S,
-  chInfo,
-  css,
-  curTable,
-  curView,
-  fmt,
-  hideTip,
-  mix,
-  niceStep,
-  prep,
-  replaySpan,
-  series,
-  showTip,
-  switchKey,
-  theme,
-} from './state';
+import { $, RUN, S, chInfo, css, curTable, curView, fmt, hideTip, mix, niceStep, prep, replaySpan, series, showTip, theme } from './state';
 import type { Cell, ChInfo, RGB, TipRow } from './state';
-import type { Log, Pt, Pull, SwitchRow, Switches, Table, TraceDef } from './types';
+import type { Log, Pt, Pull, Table, TraceDef } from './types';
 
 const TAU = 6.2832;
 
@@ -236,11 +219,8 @@ export function dynoHover(e: PointerEvent): void {
 
 // ---------- traces ----------
 
-/** Trace geometry: left gutter, right gutter for live values, label row, panel height, gap, time axis. */
-export const TG = { l: 46, r: 92, lab: 17, ph: 53, gap: 6, axis: 22 };
-/** Switch row geometry: space above the first row, then per row a line for the name, the bar, and space under it. */
-export const SW = { top: 10, lab: 14, bar: 8, gap: 4 };
-const SW_PITCH = SW.lab + SW.bar + SW.gap;
+/** Trace geometry: left gutter, right gutter for live values, label row, panel height, gap, the band of ticks above the time axis, time axis. */
+export const TG = { l: 46, r: 92, lab: 17, ph: 53, gap: 6, ticks: 12, axis: 22 };
 
 interface Span {
   log: Log;
@@ -265,10 +245,8 @@ export interface TraceLayout {
   x1: number;
   X: (v: number) => number;
   panels: Panel[];
-  /** switch rows drawn under the last panel */
-  rows: SwitchRow[];
-  /** y of the bottom of the last panel, where the switch rows start */
-  swY: number;
+  /** y of the time axis: under the last panel and the band of ticks */
+  axisY: number;
 }
 
 let trCache: { key: string; off: HTMLCanvasElement } | null = null;
@@ -277,42 +255,6 @@ export const traceLayout = () => trGeom;
 export const dropTraceCache = () => {
   trCache = null;
 };
-
-/** The switch rows to draw. By RPM has none: a switch against engine speed is not a timeline. */
-const switchRows = (): SwitchRow[] => (S.xmode === 'time' ? (shownSwitches()?.rows ?? []) : []);
-/** The rows in S.sw, only when they are for the log and span on screen. Everything that draws or reads rows goes through here. */
-const shownSwitches = (): Switches | null => (S.sw && S.focus && S.swFor === switchKey(S.focus) ? S.sw : null);
-const swHeight = (rows: number) => (rows ? SW.top + rows * SW_PITCH : 0);
-/** y of the top of row k's bar. */
-const swBarY = (L: TraceLayout, k: number) => L.swY + SW.top + k * SW_PITCH + SW.lab;
-
-/** What a switch row reads at time t, from the spans the core returned. No samples are read here. */
-export function switchAt(row: SwitchRow, t: number): 'On' | 'Off' | '–' {
-  const inside = (spans: [number, number][]) => spans.some(s => t >= s[0] && t <= s[1]);
-  return inside(row.gaps) ? '–' : inside(row.on) ? 'On' : 'Off';
-}
-
-/** Index of the switch row under the pointer, or null. A row is its name and its bar. */
-export function switchRowAt(e: PointerEvent): number | null {
-  const L = trGeom;
-  if (!L || !L.rows.length) return null;
-  const y = e.clientY - $('tr-cv').getBoundingClientRect().top - L.swY - SW.top;
-  const k = Math.floor(y / SW_PITCH);
-  return y >= 0 && k < L.rows.length ? k : null;
-}
-
-/** What the note under the traces says about the switch rows. */
-function switchNote(rpmMode: boolean): string {
-  const sw = shownSwitches();
-  if (!sw) return '';
-  if (rpmMode) return sw.rows.length ? ' By RPM hides the switch rows.' : '';
-  if (!sw.more) return '';
-  return (
-    ' ' +
-    sw.more +
-    (sw.more === 1 ? ' more switch changes in this span and is not shown.' : ' more switches change in this span and are not shown.')
-  );
-}
 
 function trLayout(w: number): TraceLayout {
   const f = S.focus!;
@@ -374,8 +316,8 @@ function trLayout(w: number): TraceLayout {
     }
     return { ...p, y0: i * (TG.lab + TG.ph + TG.gap) + TG.lab, vlo: lo, vhi: hi, ia, ib: p.b ? chInfo(f.log, p.b) : null };
   });
-  const swY = panels.length * (TG.lab + TG.ph + TG.gap) - TG.gap;
-  return { pw, rpmMode, spans, x0, x1, X, panels, rows: switchRows(), swY };
+  const axisY = panels.length * (TG.lab + TG.ph + TG.gap) - TG.gap + TG.ticks;
+  return { pw, rpmMode, spans, x0, x1, X, panels, axisY };
 }
 
 const panelY = (p: Panel, v: number) => p.y0 + TG.ph - ((clamp(v, p.vlo, p.vhi) - p.vlo) / (p.vhi - p.vlo || 1)) * TG.ph;
@@ -383,9 +325,8 @@ const panelY = (p: Panel, v: number) => p.y0 + TG.ph - ((clamp(v, p.vlo, p.vhi) 
 export function drawTraces(): void {
   const wrap = $('tr-wrap');
   const n = curView().traces.length;
-  // the rows go under traces: where a message stands in for the traces there are none
-  const band = S.focus && n ? swHeight(switchRows().length) : 0;
-  const hpx = Math.max(1, n) * (TG.lab + TG.ph + TG.gap) + band + TG.axis + 4;
+  // the band of ticks is always there, so the canvas keeps one height whatever the chips
+  const hpx = Math.max(1, n) * (TG.lab + TG.ph + TG.gap) + TG.ticks + TG.axis + 4;
   if (wrap.style.height !== hpx + 'px') wrap.style.height = hpx + 'px';
   const cv = $<HTMLCanvasElement>('tr-cv');
   const { ctx, w, h, dpr } = prep(cv);
@@ -398,7 +339,6 @@ export function drawTraces(): void {
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(t, 12, 24);
     trGeom = null;
-    S.swNow = [];
     $('tr-note').textContent = '';
   };
   if (!f) return msg('Add a log to replay it.');
@@ -406,8 +346,7 @@ export function drawTraces(): void {
   if (S.xmode === 'rpm' && !S.runs[0]) return msg('By RPM needs at least one pull selected as a run.');
   const L = trLayout(w);
   const key = [w, h, dpr, S.rev, S.xmode, th.surface].join('|');
-  // the time axis sits under the switch rows, so the rows share it with the traces
-  const bottom = L.swY + swHeight(L.rows.length);
+  const bottom = L.axisY;
   const top = L.panels[0].y0;
   trGeom = L;
 
@@ -514,40 +453,6 @@ export function drawTraces(): void {
       c.restore();
     }
 
-    // switch rows: the name, then a bar that is filled while the switch is on and empty where there are no samples
-    // a span in whole pixels, never less than one: a switch that is on for one sample of a long span still shows
-    const px = ([a, b]: [number, number]) => {
-      const wd = Math.max(1, Math.ceil(L.X(b)) - Math.floor(L.X(a)));
-      return [Math.min(Math.floor(L.X(a)), TG.l + L.pw - wd), wd];
-    };
-    L.rows.forEach((row, k) => {
-      const y = swBarY(L, k);
-      c.font = '700 11px ' + th.body;
-      c.fillStyle = th.ink2;
-      c.textAlign = 'left';
-      c.textBaseline = 'alphabetic';
-      c.fillText(row.name, TG.l, y - 4, L.pw);
-      c.fillStyle = th.grid;
-      c.fillRect(TG.l, y, L.pw, SW.bar);
-      c.fillStyle = th.ink2;
-      for (const span of row.on) {
-        const [x, wd] = px(span);
-        c.fillRect(x, y, wd, SW.bar);
-      }
-      for (const span of row.gaps) {
-        const [x, wd] = px(span);
-        c.clearRect(x, y, wd, SW.bar);
-      }
-    });
-    if (L.rows.length) {
-      c.strokeStyle = th.rule;
-      c.lineWidth = 1;
-      c.beginPath();
-      c.moveTo(TG.l, bottom + 0.5);
-      c.lineTo(TG.l + L.pw, bottom + 0.5);
-      c.stroke();
-    }
-
     // x axis
     c.font = '11px ' + th.body;
     c.fillStyle = th.ink3;
@@ -606,19 +511,6 @@ export function drawTraces(): void {
     ctx.lineTo(x, bottom);
     ctx.stroke();
   }
-  // the row the pointer is on marks each of its changes through the traces; no other row does, so the traces stay clean
-  const pointed = S.swHover;
-  if (pointed !== null && L.rows[pointed]) {
-    ctx.strokeStyle = th.ink2;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (const t of L.rows[pointed].changes) {
-      const x = Math.round(L.X(t)) + 0.5;
-      ctx.moveTo(x, top);
-      ctx.lineTo(x, swBarY(L, pointed) + SW.bar);
-    }
-    ctx.stroke();
-  }
   // playhead: run A's log in RPM mode, the focused log in time mode
   let head: { log: Log; x: number } | null;
   if (L.rpmMode) head = f.pull === S.runs[0] && S.t >= f.m0 && S.t <= f.m1 ? { log: f.log, x: L.X(valAt(f.log, f.log.ch.rpm, S.t)) } : null;
@@ -657,20 +549,10 @@ export function drawTraces(): void {
       ctx.fillText(fmt(vb, p.ib.d) + ' ' + p.ib.label.toLowerCase().split(' ').pop(), TG.l + L.pw + 10, p.y0 + TG.ph / 2 + 12);
     }
   }
-  // what each switch reads at the playhead
-  S.swNow = L.rows.map(row => switchAt(row, S.t));
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.font = '700 11.5px ' + th.body;
-  S.swNow.forEach((txt, k) => {
-    ctx.fillStyle = txt === 'On' ? th.ink : th.ink2;
-    ctx.fillText(txt, TG.l + L.pw + 10, swBarY(L, k) + SW.bar / 2);
-  });
   $('tr-note').textContent =
     (L.rpmMode
       ? 'Each selected run is drawn against its own RPM in its run colour. Click to move the playhead on run A.'
-      : 'Click or drag to move the playhead.' + (f.m0 === f.m0 ? ' The shaded span is the selected pull or finding.' : '')) +
-    switchNote(L.rpmMode);
+      : 'Click or drag to move the playhead.' + (f.m0 === f.m0 ? ' The shaded span is the selected pull or finding.' : '')) + chipsNote();
 }
 
 /** Pointer position on the trace x axis, in seconds or RPM. */
