@@ -535,7 +535,7 @@ function showFinding(f: Finding, o?: Occurrence): void {
     renderViewSel();
     syncPicker();
     renderReadouts();
-    $('view-msg').textContent = 'Showing the channels behind this finding. Flagged channels come first.';
+    viewMsg('Showing the channels behind this finding. Flagged channels come first.');
   }
   renderStats();
   drawAll();
@@ -793,6 +793,9 @@ function updatePicker(now: number): void {
 
 const FINDING_OPTION = '\u0000finding';
 
+/** Whether a view is saved under this name. Its own key only: "constructor" and "toString" are on every object and are not saved views. */
+const isSavedView = (nm: string): boolean => Object.hasOwn(S.views, nm);
+
 /** The name Save view is asking about before it replaces that view, and the clock that withdraws the question. */
 let replaceAsked = '';
 let replaceTimer = 0;
@@ -805,9 +808,18 @@ function disarmReplace(): void {
   $('view-save').textContent = 'Save view';
 }
 
+/**
+ * Write the line beside the view buttons. Every message but the Replace question withdraws that question first,
+ * so the button never says Replace beside another message and the question's clock never clears one.
+ */
+function viewMsg(text: string): void {
+  disarmReplace();
+  $('view-msg').textContent = text;
+}
+
 function viewChanged(): void {
   S.rev++;
-  $('view-msg').textContent = 'Unsaved changes';
+  viewMsg('Unsaved changes');
   renderViewSel();
   syncPicker();
   renderReadouts();
@@ -828,7 +840,7 @@ function renderViewSel(): void {
     o.value = FINDING_OPTION;
     sel.appendChild(o);
     sel.value = o.value;
-  } else sel.value = S.viewName in S.views || S.viewName === 'Default' ? S.viewName : 'Default';
+  } else sel.value = isSavedView(S.viewName) || S.viewName === 'Default' ? S.viewName : 'Default';
   $<HTMLButtonElement>('view-del').disabled = !!S.fview || sel.value === 'Default';
   const back = $('view-back');
   back.hidden = !S.fview;
@@ -837,11 +849,10 @@ function renderViewSel(): void {
 
 function loadView(nm: string): void {
   if (nm === FINDING_OPTION) return;
-  disarmReplace();
   S.fview = null;
   S.viewName = nm;
   S.rview = copyView(nm === 'Default' ? DEFAULT_VIEW : S.views[nm]);
-  $('view-msg').textContent = '';
+  viewMsg('');
   input('view-name').value = nm === 'Default' ? '' : nm;
   S.rev++;
   renderViewSel();
@@ -1250,30 +1261,24 @@ function wire(): void {
   $<HTMLSelectElement>('view-sel').addEventListener('change', e => loadView((e.target as HTMLSelectElement).value));
   $('view-back').addEventListener('click', () => {
     leaveFinding();
-    $('view-msg').textContent = '';
+    viewMsg('');
     drawAll();
   });
   $('view-save').addEventListener('click', () => {
     const nm = input('view-name').value.trim();
     if (!nm || nm === 'Default') {
-      $('view-msg').textContent = 'Type a name for the view first.';
+      viewMsg('Type a name for the view first.');
       input('view-name').focus();
       return;
     }
     // saving over another view asks first; saving the view that is loaded is how its changes are kept.
-    // Object.keys, not `in`: "constructor" is on every object and is not a saved view
-    if (Object.keys(S.views).includes(nm) && nm !== S.viewName && replaceAsked !== nm) {
-      disarmReplace();
+    if (isSavedView(nm) && nm !== S.viewName && replaceAsked !== nm) {
+      viewMsg('A view called “' + nm + '” exists. Replace it?');
       replaceAsked = nm;
       $('view-save').textContent = 'Replace';
-      $('view-msg').textContent = 'A view called “' + nm + '” exists. Replace it?';
-      replaceTimer = window.setTimeout(() => {
-        disarmReplace();
-        $('view-msg').textContent = '';
-      }, 5000);
+      replaceTimer = window.setTimeout(() => viewMsg(''), 5000);
       return;
     }
-    disarmReplace();
     adoptFinding();
     S.views[nm] = copyView(S.rview);
     S.viewName = nm;
@@ -1283,12 +1288,10 @@ function wire(): void {
     renderReadouts();
     drawAll();
     saveSettings();
-    $('view-msg').textContent = 'Saved “' + nm + '”.';
+    viewMsg('Saved “' + nm + '”.');
   });
   input('view-name').addEventListener('input', () => {
-    if (!replaceAsked) return;
-    disarmReplace();
-    $('view-msg').textContent = '';
+    if (replaceAsked) viewMsg('');
   });
   $('view-del').addEventListener('click', () => {
     const nm = $<HTMLSelectElement>('view-sel').value;
@@ -1300,7 +1303,7 @@ function wire(): void {
       label: 'Undo',
       run: () => {
         // a view saved under the name since then is not replaced
-        if (Object.keys(S.views).includes(nm)) return;
+        if (isSavedView(nm)) return;
         S.views[nm] = kept;
         loadView(nm);
       },
@@ -1572,7 +1575,7 @@ export async function boot(): Promise<void> {
   syncSeg('data-smooth', S.smooth);
   S.views = st.views && typeof st.views === 'object' ? st.views : {};
   S.names = { logs: { ...(st.names?.logs || {}) }, pulls: { ...(st.names?.pulls || {}) } };
-  S.viewName = st.viewName && (st.viewName === 'Default' || st.viewName in S.views) ? st.viewName : 'Default';
+  S.viewName = st.viewName && (st.viewName === 'Default' || isSavedView(st.viewName)) ? st.viewName : 'Default';
   if (st.working && Array.isArray(st.working.traces) && Array.isArray(st.working.readouts)) S.rview = copyView(st.working);
   else S.rview = copyView(S.viewName === 'Default' ? DEFAULT_VIEW : S.views[S.viewName]);
   input('view-name').value = S.viewName === 'Default' ? '' : S.viewName;

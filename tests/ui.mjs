@@ -354,6 +354,21 @@ try {
     replaced.msg === 'Saved “Warm-up”.' && replaced.btn === 'Save view' && replaced.view === 'Warm-up',
     JSON.stringify(replaced),
   );
+  // another message on that line withdraws the question: the button never says Replace beside it
+  await page.fill('#view-name', 'constructor');
+  await page.click('#view-save');
+  const askedAgain = await viewState();
+  await page.fill('#pick-q', 'coolant temp');
+  await page
+    .locator('#pick-list .pk:not([hidden])', { has: page.locator('.nm[title="Coolant Temperature"]') })
+    .locator('button', { hasText: 'Trace' })
+    .click();
+  const withdrawn = await viewState();
+  check(
+    'a change to the view withdraws the question',
+    askedAgain.btn === 'Replace' && withdrawn.msg === 'Unsaved changes' && withdrawn.btn === 'Save view',
+    JSON.stringify([askedAgain.btn, withdrawn.msg, withdrawn.btn]),
+  );
   // deleting a view can be undone
   await page.selectOption('#view-sel', 'constructor');
   await page.click('#view-del');
@@ -720,10 +735,13 @@ try {
   const away = [await page.evaluate(() => window.__logViewer.swHover), await lineAt(clutch?.changes[0] ?? 0)];
   check('the lines go when the pointer moves up to the traces', away[0] === null && !sameColour(away[1], ink2), JSON.stringify(away));
 
-  // a saved smoothing level the app does not know falls back to Medium, also when it names something every object has
+  // a saved smoothing level or view name the app does not know falls back to the default, also when it names something every object has
   await page.waitForTimeout(600); // let the write this page scheduled on opening finish first
   const saved = await (await fetch(url + 'api/get_settings', { method: 'POST', body: '{}' })).json();
-  await fetch(url + 'api/set_settings', { method: 'POST', body: JSON.stringify({ value: { ...saved, smooth: 'constructor' } }) });
+  await fetch(url + 'api/set_settings', {
+    method: 'POST',
+    body: JSON.stringify({ value: { ...saved, smooth: 'constructor', viewName: 'constructor' } }),
+  });
   await page.reload();
   await libraryOpen(page);
   await settle(page);
@@ -736,6 +754,17 @@ try {
     fallback.state === 'med' && fallback.pressed.join() === 'med',
     JSON.stringify(fallback),
   );
+  const fallbackView = await page.evaluate(() => ({
+    state: window.__logViewer.viewName,
+    chosen: document.getElementById('view-sel').value,
+  }));
+  check(
+    'a saved view name that is not a saved view falls back to Default',
+    fallbackView.state === 'Default' && fallbackView.chosen === 'Default',
+    JSON.stringify(fallbackView),
+  );
+  // put back the view the checks before this one left loaded
+  if (Object.hasOwn(saved.views ?? {}, saved.viewName)) await page.selectOption('#view-sel', saved.viewName);
 
   // watch folder (browser mode takes a typed path)
   const watch = join(tmp, 'incoming');
