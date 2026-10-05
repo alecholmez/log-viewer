@@ -1655,25 +1655,39 @@ try {
   // choosing a run later does not scroll the list again, and the focus the rebuild gives back does not scroll it.
   // The last pull is chosen from the page's own code, which scrolls nothing; it is below the visible part of the box
   // at scrollTop 0, so a scroll to it, or to the button that has focus, would show as a changed scrollTop.
-  await page.evaluate(() => (document.querySelector('.rail').scrollTop = 0));
+  const railReset = await page.evaluate(() => {
+    const rail = document.querySelector('.rail');
+    if (rail) rail.scrollTop = 0;
+    return !!rail;
+  });
   const lastRun = await page.evaluate(() => {
     const rail = document.querySelector('.rail');
     const btn = [...document.querySelectorAll('#logs .pull button.r0')].pop();
-    if (!btn) return null;
-    const row = btn.closest('.pull').getBoundingClientRect();
-    const below = row.top >= Math.min(rail.getBoundingClientRect().bottom, innerHeight);
+    if (!rail || !btn) return null;
+    const row = btn.closest('.pull');
+    const rowTop = row.getBoundingClientRect().top;
+    const below = rowTop >= Math.min(rail.getBoundingClientRect().bottom, innerHeight);
+    const before = { unpressed: btn.getAttribute('aria-pressed') === 'false', head: document.getElementById('find-run-h').textContent };
+    const rowText = row.textContent.slice(0, 30);
     btn.focus({ preventScroll: true });
     const fid = btn.dataset.fid;
     btn.click();
-    return { below, fid, key: btn.closest('.pull').textContent.slice(0, 30) };
+    return { below, ...before, fid, rowText };
   });
-  const lastChosen =
+  // the redraw after the core's answer (renderStats) is what changes the heading over the findings: wait for it, then read
+  const redrawn =
     !!lastRun &&
-    (await until(page, fid => document.querySelector(`#logs [data-fid="${fid}"]`)?.getAttribute('aria-pressed') === 'true', lastRun.fid));
+    (await until(
+      page,
+      ([fid, head]) =>
+        document.querySelector(`#logs [data-fid="${fid}"]`)?.getAttribute('aria-pressed') === 'true' &&
+        document.getElementById('find-run-h').textContent !== head,
+      [lastRun.fid, lastRun.head],
+    ));
   const listAfterRun = await page.evaluate(fid => {
     const rail = document.querySelector('.rail');
     return {
-      box: rail.scrollTop,
+      box: rail ? rail.scrollTop : -1,
       page: scrollY,
       focus: document.activeElement?.dataset?.fid === fid,
     };
@@ -1687,13 +1701,15 @@ try {
   check(
     'choosing a run does not scroll the list again',
     listAt700.box > 0 &&
+      railReset &&
       !!lastRun &&
       lastRun.below &&
-      lastChosen &&
+      lastRun.unpressed &&
+      redrawn &&
       listAfterRun.focus &&
       listAfterRun.box === 0 &&
       listAfterRun.page === 0,
-    JSON.stringify([listAt700.box, lastRun, lastChosen, listAfterRun]),
+    JSON.stringify([listAt700.box, railReset, lastRun, redrawn, listAfterRun]),
   );
   // fitting the screen: with the default view and pull, the replay from the transport to the time axis fits the window,
   // with plots from 34 to 53 px; when it cannot, the page scrolls and the transport stays at the top of the window
