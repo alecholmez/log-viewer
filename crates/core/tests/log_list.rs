@@ -376,3 +376,15 @@ fn a_log_with_no_pedal_reading_is_not_told_its_pedal_stayed_low() {
         "No pulls: the car stayed out of gear."
     );
 }
+
+#[test]
+fn a_pull_in_a_log_with_no_manifold_pressure_has_no_peak_pressure() {
+    let rpm: Vec<f64> = (0..40).map(|i| 3000.0 + 25.0 * i as f64).collect();
+    let mut s = Session::memory();
+    s.load_text("t.csv", &drive(50, rpm, Some(2.0), 300.0, Some(500.0)))
+        .unwrap();
+    let overview = call(&mut s, "overview", json!({})).unwrap();
+    let pull = &overview["pulls"][0];
+    assert_eq!(pull["peakPedal"], 50.0);
+    assert_eq!(pull["peakMap"], Value::Null);
+}

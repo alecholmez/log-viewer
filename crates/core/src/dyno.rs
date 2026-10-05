@@ -26,6 +26,7 @@ pub struct Pull {
     pub gain: f64,
     pub peak_pedal: f64,
     pub peak_tps: f64,
+    /// NaN when the log has no manifold pressure reading in the pull
     pub peak_map: f64,
 }
 
@@ -76,7 +77,9 @@ pub fn detect_pulls(log: &Log) -> Vec<Pull> {
     for (a, b) in stretches(log) {
         let (dur, gain) = (t[b] - t[a], ch.rpm[b] - ch.rpm[a]);
         if dur >= MIN_DUR && gain >= MIN_GAIN {
-            let (mut pk, mut mp, mut tp) = (0.0f64, 0.0f64, 0.0f64);
+            // the peak pressure starts as NaN, so a pull with no reading of it has none (null in JSON); a pull always has
+            // pedal readings, at MIN_PEDAL or more
+            let (mut pk, mut mp, mut tp) = (0.0f64, f64::NAN, 0.0f64);
             for j in a..=b {
                 pk = pk.max(ch.pedal[j]);
                 mp = mp.max(ch.map[j]);

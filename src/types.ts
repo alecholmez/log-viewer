@@ -68,7 +68,8 @@ export interface PullDto {
   gain: number;
   peakPedal: number;
   peakTps: number;
-  peakMap: number;
+  /** null when the log has no manifold pressure reading in the pull */
+  peakMap: number | null;
 }
 export interface Pull extends PullDto {
   log: Log;

@@ -437,23 +437,27 @@ function logHead(log: Log, txt: HTMLElement, holder: HTMLElement): HTMLElement {
   return head;
 }
 
-/** One pull: its name and facts, A, B and C, and Rename. */
+/**
+ * One pull: its name, then two lines of facts that never wrap, when and how long and then the load; at the right A, B and C,
+ * with Rename under them.
+ */
 function pullRow(p: Pull): HTMLLIElement {
   const slot = S.runs.indexOf(p);
   const row = el('li', 'pull' + (slot >= 0 ? ' on' : ''));
-  const t2 = el('div');
+  const txt = el('div', 'pull-text');
   const pt = el('div', 'ttl', pullName(p));
-  t2.appendChild(pt);
-  // no-break spaces: a value never parts from its unit, and a separator never starts a line
-  const nb = ' ';
-  const facts = [
-    'at' + nb + p.t0.toFixed(1) + nb + 's',
-    p.dur.toFixed(1) + nb + 's',
-    'accelerator' + nb + fmt(p.peakPedal) + '%',
-    fmt(p.peakMap) + nb + 'kPa',
-  ];
-  const meta = el('div', 'meta', (S.names.pulls[p.key] ? pullDefault(p) + ' · ' : '') + facts.join(nb + '· ') + ' ');
-  t2.appendChild(meta);
+  txt.appendChild(pt);
+  // a pull the person named keeps its gear and RPM range under the name
+  if (S.names.pulls[p.key]) txt.appendChild(el('div', 'meta fact', pullDefault(p)));
+  // a fact the log does not have is left out with its separator, and a line with nothing on it is not drawn
+  const line = (facts: (string | null)[]) => {
+    const text = facts.filter(f => f !== null).join(' · ');
+    if (text) txt.appendChild(el('div', 'meta fact', text));
+  };
+  const known = (v: number | null): v is number => v !== null && v === v;
+  line(['at ' + p.t0.toFixed(1) + ' s', p.dur.toFixed(1) + ' s']);
+  line([known(p.peakPedal) ? 'accelerator ' + fmt(p.peakPedal) + '%' : null, known(p.peakMap) ? fmt(p.peakMap) + ' kPa' : null]);
+  const side = el('div', 'pull-side');
   const ab = el('div', 'ab');
   RUN.forEach((nm, i) => {
     const b = el('button', 'r' + i, nm);
@@ -465,7 +469,8 @@ function pullRow(p: Pull): HTMLLIElement {
     b.addEventListener('click', () => setRun(i, p));
     ab.appendChild(b);
   });
-  meta.appendChild(
+  side.appendChild(ab);
+  side.appendChild(
     linkBtn('Rename', 'rename|' + p.key, b =>
       startRename(
         pt,
@@ -485,8 +490,8 @@ function pullRow(p: Pull): HTMLLIElement {
       ),
     ),
   );
-  row.appendChild(t2);
-  row.appendChild(ab);
+  row.appendChild(txt);
+  row.appendChild(side);
   return row;
 }
 

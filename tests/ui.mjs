@@ -355,6 +355,91 @@ try {
     focusAfterRun === 'run2|PCLog_2026-04-17_0146pm.csv|20260417 01:46:49@0.7 true',
     focusAfterRun,
   );
+  // a pull's row: its title, then two lines of facts, each on one line; Rename under A, B and C
+  const pullRows = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('#logs .pull')].map(r => {
+        const facts = [...r.querySelectorAll('.fact')];
+        const ab = r.querySelector('.ab').getBoundingClientRect();
+        const rename = [...r.querySelectorAll('button')].find(b => b.textContent === 'Rename');
+        const rn = rename?.getBoundingClientRect();
+        return {
+          text: [r.querySelector('.ttl').textContent, ...facts.map(f => f.textContent)].join(' / '),
+          facts: facts.length,
+          oneLine: facts.every(
+            f => f.getClientRects().length === 1 && f.getBoundingClientRect().height < 20 && f.scrollWidth <= f.clientWidth,
+          ),
+          ends: facts.every(f => !/^\s*·|·\s*$/.test(f.textContent)),
+          beside: !!rn && !rename.closest('.pull-text') && rn.top >= ab.bottom - 1 && Math.abs(rn.right - ab.right) <= 1,
+        };
+      }),
+    );
+  const railWidth = await page.evaluate(() => Math.round(document.querySelector('.rail').getBoundingClientRect().width));
+  const rowShape = await pullRows();
+  check(
+    'each pull shows its title, when and how long, then the load',
+    rowShape.map(r => r.text).join(' | ') ===
+      [
+        '2nd gear · 2,157–3,523 rpm / at 12.1 s · 4.2 s / accelerator 20% · 59 kPa',
+        '2nd gear · 2,285–3,759 rpm / at 35.8 s · 3.5 s / accelerator 23% · 65 kPa',
+        '3rd gear · 2,552–3,863 rpm / at 55.4 s · 4.4 s / accelerator 70% · 120 kPa',
+        '2nd gear · 2,689–5,662 rpm / at 0.2 s · 3.7 s / accelerator 68% · 138 kPa',
+        '1st gear · 2,359–3,834 rpm / at 27.5 s · 2.3 s / accelerator 19% · 57 kPa',
+        '2nd gear · 2,551–5,959 rpm / at 31.3 s · 3.7 s / accelerator 58% · 129 kPa',
+        '3rd gear · 4,325–5,470 rpm / at 35.8 s · 1.8 s / accelerator 61% · 160 kPa',
+        '3rd gear · 2,974–3,706 rpm / at 0.7 s · 2.1 s / accelerator 41% · 97 kPa',
+        '2nd gear · 2,066–3,558 rpm / at 0.1 s · 3.8 s / accelerator 24% · 76 kPa',
+        '2nd gear · 2,645–3,484 rpm / at 8.0 s · 3.2 s / accelerator 18% · 56 kPa',
+      ].join(' | '),
+    rowShape.map(r => r.text).join(' | '),
+  );
+  check(
+    "at the rail's width, 344 px, each line of facts is one line, whole, with no separator at either end",
+    railWidth === 344 && rowShape.length === 10 && rowShape.every(r => r.facts === 2 && r.oneLine && r.ends),
+    railWidth + ' ' + JSON.stringify(rowShape.filter(r => !(r.facts === 2 && r.oneLine && r.ends))),
+  );
+  check(
+    'Rename sits under A, B and C at the right of the row, not among the facts',
+    rowShape.length === 10 && rowShape.every(r => r.beside),
+    JSON.stringify(rowShape.filter(r => !r.beside).map(r => r.text)),
+  );
+  // a fact the log does not have is left out with its separator, and a line with nothing on it is not drawn
+  const missingFacts = [];
+  for (const dropKeys of [['peakMap'], ['peakMap', 'peakPedal']]) {
+    await page.evaluate(dropKeys => {
+      const p = window.__logViewer.pulls.find(q => q.key.endsWith('01:46:49@0.7'));
+      p.held = { peakMap: p.peakMap, peakPedal: p.peakPedal };
+      for (const k of dropKeys) p[k] = null;
+    }, dropKeys);
+    // overlaying it and taking it off again rebuilds the list twice
+    await c2974.click();
+    await c2974.click();
+    missingFacts.push((await pullRows()).find(r => r.text.startsWith('3rd gear · 2,974'))?.text);
+    await page.evaluate(() => {
+      const p = window.__logViewer.pulls.find(q => q.key.endsWith('01:46:49@0.7'));
+      Object.assign(p, p.held);
+      delete p.held;
+    });
+  }
+  check(
+    'a fact the log does not have is left out with its separator, and an empty line is not drawn',
+    missingFacts.join(' | ') ===
+      '3rd gear · 2,974–3,706 rpm / at 0.7 s · 2.1 s / accelerator 41% | 3rd gear · 2,974–3,706 rpm / at 0.7 s · 2.1 s',
+    missingFacts.join(' | '),
+  );
+  // a pull the person named keeps its gear and RPM range under the name, above the two lines
+  await page.locator('.pull', { hasText: '3rd gear · 2,974' }).locator('button', { hasText: 'Rename' }).click();
+  await page.keyboard.type('Hill');
+  await page.keyboard.press('Enter');
+  const namedPull = (await pullRows()).find(r => r.text.startsWith('Hill'))?.text;
+  check(
+    'a named pull shows its name, then its gear and RPM range, then the two lines',
+    namedPull === 'Hill / 3rd gear · 2,974–3,706 rpm / at 0.7 s · 2.1 s / accelerator 41% · 97 kPa',
+    String(namedPull),
+  );
+  await page.locator('.pull', { hasText: 'Hill' }).locator('button', { hasText: 'Rename' }).click();
+  await page.fill('.pull input.rename', '');
+  await page.keyboard.press('Enter');
   // the quiet grey is --ink-3; the contrast is against the panel the name sits on
   const fileInk = await page.evaluate(() => {
     const quiet = getComputedStyle(document.documentElement).getPropertyValue('--ink-3').trim();
