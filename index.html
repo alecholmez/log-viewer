@@ -115,7 +115,7 @@
 
       <section class="panel full" id="replay-panel" aria-labelledby="h-replay">
         <div class="panel-head"><h2 id="h-replay">Replay</h2><span class="hint" id="replay-what"></span></div>
-        <div class="transport">
+        <div class="transport" id="transport">
           <button class="btn primary" id="play" type="button">Play</button>
           <button class="btn" id="restart" type="button">Restart</button>
           <button class="btn" id="step-prev" type="button">Previous change</button>
@@ -129,7 +129,7 @@
           <input id="scrub" type="range" min="0" max="1000" step="1" value="0" aria-label="Replay position">
           <span class="clock" id="clock"></span>
         </div>
-        <div class="viewbar">
+        <div class="viewbar" id="viewbar">
           <label for="view-sel">View</label>
           <select id="view-sel"></select>
           <button class="btn sm" id="view-back" type="button" hidden>Back</button>

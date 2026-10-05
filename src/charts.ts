@@ -220,10 +220,10 @@ export function dynoHover(e: PointerEvent): void {
 // ---------- traces ----------
 
 /**
- * Trace geometry: left gutter, right gutter for live values, label row, panel height, gap, the band of ticks above the
+ * Trace geometry: left gutter, right gutter for live values, label row, the least and the most panel height, gap, the band of ticks above the
  * time axis, a tick and a chosen chip's tick, time axis.
  */
-export const TG = { l: 46, r: 92, lab: 17, ph: 53, gap: 6, ticks: 12, tick: 4, tickChosen: 8, axis: 22 };
+export const TG = { l: 46, r: 92, lab: 17, phMin: 34, phMax: 53, gap: 6, ticks: 12, tick: 4, tickChosen: 8, axis: 22 };
 /** How strongly the chosen chip's stretches are tinted with run A. */
 const SHADE_ALPHA = 0.12;
 
@@ -244,6 +244,8 @@ interface Panel extends TraceDef {
 }
 export interface TraceLayout {
   pw: number;
+  /** height of each trace's plot, fitted to the window */
+  ph: number;
   rpmMode: boolean;
   spans: Span[];
   x0: number;
@@ -261,7 +263,32 @@ export const dropTraceCache = () => {
   trCache = null;
 };
 
-function trLayout(w: number): TraceLayout {
+/**
+ * The plot height at which the replay, from the top of the transport to the time axis, fits the window: the tallest from
+ * TG.phMin to TG.phMax. When it does not fit at TG.phMin either, TG.phMin, and the page scrolls.
+ */
+function fitPh(n: number): number {
+  const transport = $('transport');
+  // what sits between the transport and the traces: the view bar, the picker when open, the cards and the chips.
+  // Measured from the view bar, which scrolls with the page: the transport can be held at the top of the window
+  const above =
+    transport.offsetHeight +
+    parseFloat(getComputedStyle(transport).marginBottom) +
+    $('tr-wrap').getBoundingClientRect().top -
+    $('viewbar').getBoundingClientRect().top;
+  const room = window.innerHeight - above - TG.ticks - TG.axis - 4;
+  return clamp(Math.floor(room / n) - TG.lab - TG.gap, TG.phMin, TG.phMax);
+}
+
+/** The plot height last fitted and the number of traces it was fitted for; null when the room may have changed. */
+let fitted: { n: number; ph: number } | null = null;
+
+/** The room the traces have may have changed (the window, or a box above them): fit again on the next draw. */
+export function refit(): void {
+  fitted = null;
+}
+
+function trLayout(w: number, ph: number): TraceLayout {
   const f = S.focus!;
   const pw = w - TG.l - TG.r;
   const rpmMode = S.xmode === 'rpm';
@@ -319,19 +346,22 @@ function trLayout(w: number): TraceLayout {
       lo -= pad;
       hi += pad;
     }
-    return { ...p, y0: i * (TG.lab + TG.ph + TG.gap) + TG.lab, vlo: lo, vhi: hi, ia, ib: p.b ? chInfo(f.log, p.b) : null };
+    return { ...p, y0: i * (TG.lab + ph + TG.gap) + TG.lab, vlo: lo, vhi: hi, ia, ib: p.b ? chInfo(f.log, p.b) : null };
   });
-  const axisY = panels.length * (TG.lab + TG.ph + TG.gap) - TG.gap + TG.ticks;
-  return { pw, rpmMode, spans, x0, x1, X, panels, axisY };
+  const axisY = panels.length * (TG.lab + ph + TG.gap) - TG.gap + TG.ticks;
+  return { pw, ph, rpmMode, spans, x0, x1, X, panels, axisY };
 }
 
-const panelY = (p: Panel, v: number) => p.y0 + TG.ph - ((clamp(v, p.vlo, p.vhi) - p.vlo) / (p.vhi - p.vlo || 1)) * TG.ph;
+const panelY = (L: TraceLayout, p: Panel, v: number) => p.y0 + L.ph - ((clamp(v, p.vlo, p.vhi) - p.vlo) / (p.vhi - p.vlo || 1)) * L.ph;
 
 export function drawTraces(): void {
   const wrap = $('tr-wrap');
   const n = curView().traces.length;
-  // the band of ticks is always there, so the canvas keeps one height whatever the chips
-  const hpx = Math.max(1, n) * (TG.lab + TG.ph + TG.gap) + TG.ticks + TG.axis + 4;
+  // the band of ticks is always there, so the canvas height depends on the window and what is above it, never on the chips' answer
+  const shown = Math.max(1, n);
+  if (!fitted || fitted.n !== shown) fitted = { n: shown, ph: fitPh(shown) };
+  const ph = fitted.ph;
+  const hpx = shown * (TG.lab + ph + TG.gap) + TG.ticks + TG.axis + 4;
   if (wrap.style.height !== hpx + 'px') wrap.style.height = hpx + 'px';
   const cv = $<HTMLCanvasElement>('tr-cv');
   const { ctx, w, h, dpr } = prep(cv);
@@ -349,7 +379,7 @@ export function drawTraces(): void {
   if (!f) return msg('Add a log to replay it.');
   if (!n) return msg('No traces in this view. Open Channels and add some.');
   if (S.xmode === 'rpm' && !S.runs[0]) return msg('By RPM needs at least one pull selected as a run.');
-  const L = trLayout(w);
+  const L = trLayout(w, ph);
   const key = [w, h, dpr, S.rev, S.xmode, th.surface].join('|');
   const bottom = L.axisY;
   const top = L.panels[0].y0;
@@ -370,14 +400,14 @@ export function drawTraces(): void {
       if (!L.rpmMode && f.m0 === f.m0) {
         c.fillStyle = flag || th.inset;
         c.globalAlpha = flag ? 0.2 : 1;
-        c.fillRect(L.X(f.m0), p.y0, Math.max(2, L.X(f.m1) - L.X(f.m0)), TG.ph);
+        c.fillRect(L.X(f.m0), p.y0, Math.max(2, L.X(f.m1) - L.X(f.m0)), L.ph);
         c.globalAlpha = 1;
       }
       if (chosen) {
         // a tint of run A, so it cannot be taken for the grey of the selected pull, and a thin edge at each change
         c.fillStyle = th.run[0];
         c.globalAlpha = SHADE_ALPHA;
-        for (const [a, b] of shade) c.fillRect(L.X(a), p.y0, Math.max(1, L.X(b) - L.X(a)), TG.ph);
+        for (const [a, b] of shade) c.fillRect(L.X(a), p.y0, Math.max(1, L.X(b) - L.X(a)), L.ph);
         c.globalAlpha = 1;
         c.strokeStyle = th.run[0];
         c.lineWidth = 1;
@@ -385,7 +415,7 @@ export function drawTraces(): void {
         for (const t of chosen.row.changes) {
           const x = Math.round(L.X(t)) + 0.5;
           c.moveTo(x, p.y0);
-          c.lineTo(x, p.y0 + TG.ph);
+          c.lineTo(x, p.y0 + L.ph);
         }
         c.stroke();
       }
@@ -397,8 +427,8 @@ export function drawTraces(): void {
       c.stroke();
       c.strokeStyle = th.rule;
       c.beginPath();
-      c.moveTo(TG.l, p.y0 + TG.ph + 0.5);
-      c.lineTo(TG.l + L.pw, p.y0 + TG.ph + 0.5);
+      c.moveTo(TG.l, p.y0 + L.ph + 0.5);
+      c.lineTo(TG.l + L.pw, p.y0 + L.ph + 0.5);
       c.stroke();
 
       const lbl = p.ia.label + (p.ia.unit && p.ia.unit !== 'λ' ? ', ' + p.ia.unit : '');
@@ -434,11 +464,11 @@ export function drawTraces(): void {
       c.textBaseline = 'top';
       c.fillText(fmt(p.vhi, p.ia.d), TG.l - 6, p.y0 + 1);
       c.textBaseline = 'bottom';
-      c.fillText(fmt(p.vlo, p.ia.d), TG.l - 6, p.y0 + TG.ph);
+      c.fillText(fmt(p.vlo, p.ia.d), TG.l - 6, p.y0 + L.ph);
 
       c.save();
       c.beginPath();
-      c.rect(TG.l, p.y0, L.pw, TG.ph);
+      c.rect(TG.l, p.y0, L.pw, L.ph);
       c.clip();
       const path = (sp: Span, arr: Float32Array | null, color: string, dash: boolean, lw: number) => {
         if (!arr) return;
@@ -452,7 +482,7 @@ export function drawTraces(): void {
             continue;
           }
           const x = L.X(xs[j]);
-          const y = panelY(p, v);
+          const y = panelY(L, p, v);
           if (pen) c.lineTo(x, y);
           else {
             c.moveTo(x, y);
@@ -591,7 +621,7 @@ export function drawTraces(): void {
   for (const p of L.panels) {
     const v = head ? valAt(head.log, series(head.log, p.a, runIdx), S.t) : NaN;
     if (head && v === v) {
-      const y = panelY(p, v);
+      const y = panelY(L, p, v);
       ctx.beginPath();
       ctx.arc(head.x, y, 5.5, 0, TAU);
       ctx.fillStyle = th.surface;
@@ -605,12 +635,12 @@ export function drawTraces(): void {
     ctx.textBaseline = 'middle';
     ctx.fillStyle = th.ink;
     ctx.font = '900 16px ' + th.disp;
-    ctx.fillText(fmt(v, p.ia.d), TG.l + L.pw + 10, p.y0 + TG.ph / 2 - (p.ib ? 5 : 0));
+    ctx.fillText(fmt(v, p.ia.d), TG.l + L.pw + 10, p.y0 + L.ph / 2 - (p.ib ? 5 : 0));
     if (p.ib && p.b && head) {
       ctx.font = '11px ' + th.body;
       ctx.fillStyle = th.ink3;
       const vb = valAt(head.log, series(head.log, p.b, runIdx), S.t);
-      ctx.fillText(fmt(vb, p.ib.d) + ' ' + p.ib.label.toLowerCase().split(' ').pop(), TG.l + L.pw + 10, p.y0 + TG.ph / 2 + 12);
+      ctx.fillText(fmt(vb, p.ib.d) + ' ' + p.ib.label.toLowerCase().split(' ').pop(), TG.l + L.pw + 10, p.y0 + L.ph / 2 + 12);
     }
   }
   $('tr-note').textContent =

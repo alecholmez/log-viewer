@@ -369,11 +369,17 @@ try {
     return {
       title: s.fview && s.fview.title,
       keys: s.fview ? s.fview.keys : [],
-      flagged: document.querySelectorAll('.ro.flag').length,
+      cards: document.querySelectorAll('#readouts .ro').length,
+      cardRow: !document.getElementById('readouts').hidden,
       sel: document.getElementById('view-sel').selectedOptions[0].textContent,
     };
   });
-  check('finding view shows flagged channels', fv.keys.length > 0 && fv.flagged > 0 && /^Finding: /.test(fv.sel), JSON.stringify(fv));
+  // every readout of a finding's view has a trace, so there is no card row; the flags are on the traces
+  check(
+    'finding view shows its flagged channels as traces, with no card row',
+    fv.keys.length > 0 && fv.cards === 0 && !fv.cardRow && /^Finding: /.test(fv.sel),
+    JSON.stringify(fv),
+  );
   await shot(page, '04-finding', true);
   await page.click('#view-back');
   check(
@@ -1259,6 +1265,69 @@ try {
     check('Replay scrolls with behavior ' + want + ' when Reduce Motion is ' + reducedMotion, behavior === want, String(behavior));
     await page.close();
   }
+  // fitting the screen: with the default view and pull, the replay from the transport to the time axis fits the window,
+  // with plots from 34 to 53 px; when it cannot, the page scrolls and the transport stays at the top of the window
+  const fit = async (width, height, picker = false) => {
+    page = await open({ viewport: { width, height } });
+    await settle(page);
+    await page.selectOption('#view-sel', 'Default');
+    await chipsShown(page, 13);
+    if (picker) await page.click('#chan-btn');
+    await page.evaluate(() => document.getElementById('replay-panel').scrollIntoView({ block: 'start' }));
+    await settle(page);
+    const r = await replay(page);
+    const span = await page.evaluate(() =>
+      Math.round(
+        document.getElementById('tr-wrap').getBoundingClientRect().bottom -
+          document.querySelector('#replay-panel .transport').getBoundingClientRect().top,
+      ),
+    );
+    const cards = await page.evaluate(() => [...document.querySelectorAll('#readouts .ro .lb')].map(e => e.textContent).join());
+    await page.evaluate(() => document.getElementById('tr-wrap').scrollIntoView({ block: 'end' }));
+    await settle(page);
+    const play = await page.evaluate(() => {
+      const b = document.getElementById('play').getBoundingClientRect();
+      return b.top >= 0 && b.bottom <= innerHeight;
+    });
+    await page.close();
+    return { ph: r.ph, span, cards, play };
+  };
+  const at900 = await fit(1440, 900);
+  check('at 1440 × 900 the replay fits from the transport to the time axis', at900.span <= 900 && at900.ph === 53, JSON.stringify(at900));
+  check('a card only for a readout without a trace', at900.cards === 'Road speed,Boost,Est. wheel power,Est. torque', at900.cards);
+  const at700 = await fit(1440, 700);
+  check(
+    'at 1440 × 700 the plots are shorter, not under 34 px, and the replay still fits',
+    at700.ph < at900.ph && at700.ph >= 34 && at700.span <= 700,
+    JSON.stringify(at700),
+  );
+  const tight = await fit(1440, 700, true);
+  check(
+    'when it cannot fit, the plots are 34 px and Play stays in the window as the page scrolls',
+    tight.ph === 34 && tight.span > 700 && tight.play,
+    JSON.stringify(tight),
+  );
+  // the fit follows the room: opening Channels takes room from the traces, and closing it gives the room back
+  page = await open({ viewport: { width: 1440, height: 700 } });
+  await settle(page);
+  await page.selectOption('#view-sel', 'Default');
+  await chipsShown(page, 13);
+  await page.evaluate(() => document.getElementById('replay-panel').scrollIntoView({ block: 'start' }));
+  await settle(page);
+  const roomClosed = (await replay(page)).ph;
+  await page.click('#chan-btn');
+  await settle(page);
+  const roomOpen = (await replay(page)).ph;
+  await page.click('#chan-btn');
+  await settle(page);
+  const roomClosedAgain = (await replay(page)).ph;
+  await page.close();
+  check(
+    'the plots give room to Channels when it opens and take it back when it closes',
+    roomOpen < roomClosed && roomClosedAgain === roomClosed,
+    JSON.stringify([roomClosed, roomOpen, roomClosedAgain]),
+  );
+
   // phone and tablet widths, dark mode: no sideways scroll, rail not sticky on a phone
   for (const [name, width, height] of [
     ['phone', 390, 844],

@@ -1,7 +1,7 @@
 // The app: loads the library from the core, renders the panels and wires the controls.
 
 import { api, inTauri, isMobile, onLogsChanged, pickFolder } from './api';
-import { atRunRpm, draw3d, drawDyno, drawTraces, dropTraceCache, dynoHover, t3Hover, tableScale, trX, traceLayout } from './charts';
+import { atRunRpm, draw3d, drawDyno, drawTraces, dropTraceCache, dynoHover, refit, t3Hover, tableScale, trX, traceLayout } from './charts';
 import { stepTarget, updateChips, wireChips } from './chips';
 import { atRpm, buildLog, chanMeta, clamp, fixTable, valAt } from './data';
 import { clearMessage, fail, progress, say, wireMessages } from './messages';
@@ -692,7 +692,10 @@ function renderReadouts(): void {
   roEls = [];
   const log = S.focus ? S.focus.log : S.logs[0];
   if (!log) return;
-  for (const id of curView().readouts) {
+  const view = curView();
+  // a channel with a trace has its value at the playhead beside the trace already: no card for it
+  const traced = new Set(view.traces.flatMap(t => (t.b ? [t.a, t.b] : [t.a])));
+  for (const id of view.readouts.filter(id => !traced.has(id))) {
     const inf = chInfo(log, id);
     const d = el('div', 'ro');
     const lb = el('div', 'lb', inf.label);
@@ -710,7 +713,9 @@ function renderReadouts(): void {
     box.appendChild(d);
     roEls.push({ id, n, d: inf.d });
   }
-  if (!curView().readouts.length) box.appendChild(el('p', 'hint', 'No readouts in this view. Open Channels and add some.'));
+  if (!view.readouts.length) box.appendChild(el('p', 'hint', 'No readouts in this view. Open Channels and add some.'));
+  // a view whose every readout has a trace has no card row
+  box.hidden = !box.childElementCount;
 }
 
 function updateReadouts(): void {
@@ -1609,6 +1614,16 @@ function wire(): void {
   };
   const ro = new ResizeObserver(() => drawAll());
   for (const id of ['dyno-wrap', 't3-wrap', 'tr-wrap']) ro.observe($(id));
+  // the boxes above the traces set the room the traces have; so does the window's height, which no observed box follows
+  const room = new ResizeObserver(() => {
+    refit();
+    drawAll();
+  });
+  for (const id of ['transport', 'viewbar', 'readouts', 'chips', 'picker']) room.observe($(id));
+  window.addEventListener('resize', () => {
+    refit();
+    drawAll();
+  });
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
   void document.fonts.ready.then(redraw);
   document.addEventListener('visibilitychange', () => {

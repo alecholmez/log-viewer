@@ -207,7 +207,8 @@ table{border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:13px}
 .ramp.div i{background:linear-gradient(90deg,var(--div-neg),var(--div-mid),var(--div-pos))}
 
 /* replay */
-.transport{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin-bottom:10px}
+/* the transport stays at the top edge of the window while the replay panel is on screen; the rest of the panel scrolls under it */
+.transport{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);padding:6px 0;margin:-6px 0 4px}
 .transport input[type="range"]{flex:1 1 180px;min-width:120px;accent-color:var(--ink);padding:0;border:0;background:none}
 .clock{font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink-2);min-width:12ch}
 .viewbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:9px 0;border-top:1px solid var(--grid);border-bottom:1px solid var(--grid);margin-bottom:12px}
