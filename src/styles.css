@@ -102,7 +102,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,ca
 input[type="text"],input[type="number"],input[type="search"],select{font:inherit;font-size:13px;font-variant-numeric:tabular-nums;color:var(--ink);background:var(--inset);border:1px solid var(--rule);border-radius:8px;padding:5px 7px;min-width:0}
 
 /* logs and pulls */
-.logs{display:grid;gap:12px;margin-top:10px}
+.logs{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin-top:10px}
 .log-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center;padding-bottom:5px;border-bottom:1px solid var(--grid)}
 .log-head .ttl{font-weight:700;font-size:13.5px;overflow-wrap:anywhere}
 .log-text{min-width:0}
@@ -113,7 +113,7 @@ input[type="text"],input[type="number"],input[type="search"],select{font:inherit
 .pull{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 8px;align-items:center;padding:6px 8px;border:1px solid transparent;border-radius:8px}
 .pull.on{background:var(--sel);border-color:transparent}
 .pull .ttl{font-weight:700;font-size:13px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
-/* a pull: its name and two lines of facts, each on one line; A, B and C at the right with Rename under them */
+/* a pull: its name, its gear and RPM range when it is named, and two lines of facts, each on one line; A, B and C at the right with Rename under them */
 .pull-text{min-width:0}
 .pull .fact{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pull-side{display:grid;justify-items:end;gap:2px}
@@ -132,6 +132,8 @@ input[type="text"],input[type="number"],input[type="search"],select{font:inherit
 .log-toggle:hover{background:var(--inset)}
 .log-toggle .ttl{min-width:0;font-weight:700;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .log-toggle .meta{flex:none;color:var(--ink-3)}
+/* open, the title wraps so that all of it can be read */
+.log-toggle[aria-expanded="true"] .ttl{white-space:normal;overflow-wrap:anywhere}
 .log-more{margin-top:4px}
 .log-more .why{margin-top:6px}
 

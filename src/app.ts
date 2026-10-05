@@ -236,7 +236,11 @@ async function reload(): Promise<void> {
     leaveFinding();
     focusPull(best);
   }
-  if (!S.focus && S.logs.length) focusLog(S.logs[0]);
+  if (!S.focus && S.logs.length) {
+    // the replayed log is gone: the replay shows run A, which opens no log the person left closed
+    if (S.runs[0]) focusPull(S.runs[0]);
+    else focusLog(S.logs[0]);
+  }
   S.rev++;
   renderViewSel();
   buildPicker();
@@ -295,9 +299,15 @@ async function recompute(): Promise<void> {
 
 // ---------- logs and pulls ----------
 
+/** The control in the log list with this `data-fid`, if the list has one: how focus finds its control again in a rebuilt list. */
+function byFid(fid: string): HTMLElement | undefined {
+  return [...$('logs').querySelectorAll<HTMLElement>('[data-fid]')].find(e => e.dataset.fid === fid);
+}
+
 /**
  * Put a name field in place of what `holder` holds. `from` is the Rename button the edit started from: the field takes its
- * `data-fid`, so when the list is rebuilt after the edit, focus goes back to that button.
+ * `data-fid`, so when the list is rebuilt after the edit, focus goes back to that button. Leaving the field by Tab carries
+ * focus on to the control it was going to.
  */
 function startRename(
   holder: HTMLElement,
@@ -317,10 +327,14 @@ function startRename(
   inp.focus();
   inp.select();
   let done = false;
-  const finish = (ok: boolean) => {
+  const finish = (ok: boolean, next?: EventTarget | null) => {
     if (done) return;
     done = true;
     commit(ok ? inp.value.trim() : null);
+    // leaving the field by Tab, or onto another control, rebuilt the list under the control focus was going to: it gets
+    // focus again in the new list, found by its data-fid
+    const fid = next instanceof HTMLElement ? next.dataset.fid : undefined;
+    if (fid) byFid(fid)?.focus({ preventScroll: true });
   };
   inp.addEventListener('keydown', e => {
     if (e.key !== 'Enter' && e.key !== 'Escape') return;
@@ -328,7 +342,7 @@ function startRename(
     e.preventDefault();
     finish(e.key === 'Enter');
   });
-  inp.addEventListener('blur', () => finish(true));
+  inp.addEventListener('blur', e => finish(true, e.relatedTarget));
 }
 
 /** A text action in the list. `fid` names it, so that it gets focus back when the list is rebuilt. */
@@ -340,12 +354,25 @@ function linkBtn(label: string, fid: string, onClick: (b: HTMLButtonElement) => 
   return b;
 }
 
+/**
+ * A log was removed from place `at` in the list. Focus goes to the log that took its place, or to the one before it when it
+ * was last, or to Add logs when none is left.
+ */
+function focusAfterRemoval(at: number): void {
+  const next = S.logs[Math.min(at, S.logs.length - 1)];
+  const control = next ? byFid((S.pulls.some(p => p.log === next) ? 'replay|' : 'open|') + next.key) : $('start-add');
+  control?.focus({ preventScroll: true });
+}
+
 async function removeLog(log: Log): Promise<void> {
   try {
+    const at = S.logs.indexOf(log);
     await api.removeLog(log.key);
     delete S.names.logs[log.key];
     for (const p of S.pulls) if (p.log === log) delete S.names.pulls[p.key];
     await reload();
+    // the control that had focus went with the log
+    focusAfterRemoval(at);
     say('Removed ' + log.name + ' from the library. The original file is untouched.');
   } catch (e) {
     fail(errText(e));
@@ -438,8 +465,8 @@ function logHead(log: Log, txt: HTMLElement, holder: HTMLElement): HTMLElement {
 }
 
 /**
- * One pull: its name, then two lines of facts that never wrap, when and how long and then the load; at the right A, B and C,
- * with Rename under them.
+ * One pull: its name, its gear and RPM range under it when the person named it, then two lines of facts that never wrap,
+ * when and how long and then the load; at the right A, B and C, with Rename under them.
  */
 function pullRow(p: Pull): HTMLLIElement {
   const slot = S.runs.indexOf(p);
@@ -525,12 +552,14 @@ function renderLogs(): void {
       for (const p of pulls) pl.appendChild(pullRow(p));
       li.appendChild(pl);
     } else {
-      // a log with no pull is one line, the title and "No pulls", until it is opened; the whole line is the button
+      // a log with no pull is one line, the title, the length and "No pulls", until it is opened; the whole line is the button
       const holder = el('div', 'log-title');
       const toggle = el('button', 'log-toggle');
       toggle.type = 'button';
       toggle.dataset.key = log.key;
       toggle.dataset.fid = 'open|' + log.key;
+      // the file name, which tells apart two logs from the same minute and is the whole name of a log with no date
+      toggle.title = log.name;
       toggle.setAttribute('aria-controls', 'log-more-' + n);
       toggle.appendChild(el('span', 'ttl', logName(log)));
       toggle.appendChild(el('span', 'meta', lengthLabel(log.duration) + ' · No pulls'));
@@ -549,7 +578,7 @@ function renderLogs(): void {
     ol.appendChild(li);
   });
   syncLogs();
-  if (had) [...ol.querySelectorAll<HTMLElement>('[data-fid]')].find(e => e.dataset.fid === had)?.focus({ preventScroll: true });
+  if (had) byFid(had)?.focus({ preventScroll: true });
 }
 
 /**
@@ -558,8 +587,7 @@ function renderLogs(): void {
  */
 function showRunA(): void {
   const p = S.runs[0];
-  const row =
-    p && [...document.querySelectorAll<HTMLElement>('#logs [data-fid]')].find(e => e.dataset.fid === 'run0|' + p.key)?.closest('.pull');
+  const row = p && byFid('run0|' + p.key)?.closest('.pull');
   let box = row ? row.parentElement : null;
   while (box && !(box.scrollHeight > box.clientHeight && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
   if (!row || !box) return;
@@ -1760,7 +1788,10 @@ function wire(): void {
 
 // ---------- boot ----------
 
-/** Read the library for the first time. A failure offers to try again. */
+/**
+ * Read the library for the first time. Once the fonts are in, scrolls the list to run A, once: it is not scrolled again
+ * when the library changes. A failure offers to try again.
+ */
 async function openLibrary(): Promise<void> {
   try {
     await reload();

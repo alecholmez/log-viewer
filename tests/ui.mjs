@@ -48,6 +48,17 @@ try {
         return x > y ? x / y : y / x;
       };
     });
+    // how the app scrolls an element, kept from before it boots: a call that animates shows as behavior 'smooth' in window.__scrolls
+    await page.addInitScript(() => {
+      window.__scrolls = [];
+      for (const fn of ['scrollTo', 'scrollBy', 'scrollIntoView']) {
+        const real = Element.prototype[fn];
+        Element.prototype[fn] = function (...args) {
+          window.__scrolls.push({ fn, behavior: args[0] && args[0].behavior });
+          return real.apply(this, args);
+        };
+      }
+    });
     await page.goto(url);
     await libraryOpen(page);
     return page;
@@ -329,12 +340,42 @@ try {
     focusAfterRename === 'Rename / Short trip / true',
     focusAfterRename,
   );
-  // an empty name is no name
+  // what the page keeps for a log: the name the person gave it, by the log's file name
+  const givenName = file => page.evaluate(f => window.__logViewer.names.logs[window.__logViewer.logs.find(l => l.name === f).key], file);
+  const file0148 = 'PCLog_2026-04-17_0148pm.csv';
+  // Escape in the field leaves the name as it was, and focus goes back to Rename
+  await logAction('Short trip', 'Rename');
+  await page.keyboard.type('Another name');
+  await page.keyboard.press('Escape');
+  const escaped = await page.evaluate(f => {
+    const s = window.__logViewer;
+    const key = s.logs.find(l => l.name === f).key;
+    const title = document.querySelector('#logs .log-toggle[data-key="' + key + '"] .ttl')?.textContent;
+    return [title, s.names.logs[key], document.activeElement?.dataset?.fid === 'rename|' + key].join(' / ');
+  }, file0148);
+  check('Escape in a rename field leaves the name as it was, and focus on Rename', escaped === 'Short trip / Short trip / true', escaped);
+  // an empty name is no name, and neither is the log's date and time: the log keeps no name
   await logAction('Short trip', 'Rename');
   if (await page.locator('#logs input.rename').count()) {
     await page.fill('#logs input.rename', '');
     await page.keyboard.press('Enter');
   }
+  const afterEmpty = await givenName(file0148);
+  await logAction(logAt('1:48 pm'), 'Rename');
+  await page.keyboard.type('Short trip');
+  await page.keyboard.press('Enter');
+  const namedAgain = await givenName(file0148);
+  await logAction('Short trip', 'Rename');
+  if (await page.locator('#logs input.rename').count()) {
+    await page.fill('#logs input.rename', logAt('1:48 pm'));
+    await page.keyboard.press('Enter');
+  }
+  const afterDefault = await givenName(file0148);
+  check(
+    'an empty name, and the date and time as a name, are no name',
+    afterEmpty === undefined && namedAgain === 'Short trip' && afterDefault === undefined,
+    JSON.stringify([afterEmpty, namedAgain, afterDefault]),
+  );
   if (await toggleOf(logAt('1:48 pm')).count()) await toggleOf(logAt('1:48 pm')).focus();
   await page.keyboard.press('Enter');
   const reclosed = await logState(logAt('1:48 pm'));
@@ -343,6 +384,26 @@ try {
     reclosed?.expanded === 'false' && reclosed.hidden && reclosed.actions === '' && reclosed.focused,
     JSON.stringify(reclosed),
   );
+  // Tab out of the rename field of a log with pulls keeps the name, and focus goes to the next control in the rebuilt list
+  const file0146 = 'PCLog_2026-04-17_0146pm.csv';
+  await logAction(logAt('1:46 pm'), 'Rename');
+  await page.keyboard.type('Test drive');
+  await page.keyboard.press('Tab');
+  const tabbed = await page.evaluate(f => {
+    const s = window.__logViewer;
+    const key = s.logs.find(l => l.name === f).key;
+    const a = document.activeElement;
+    return [
+      s.names.logs[key],
+      a === document.body ? 'nothing has focus' : a?.dataset?.fid === 'replay|' + key ? 'Replay' : a?.dataset?.fid,
+    ].join(' / ');
+  }, file0146);
+  check('Tab out of a rename field keeps the name, and focus goes on to the next control', tabbed === 'Test drive / Replay', tabbed);
+  await logAction('Test drive', 'Rename');
+  if (await page.locator('#logs input.rename').count()) {
+    await page.fill('#logs input.rename', '');
+    await page.keyboard.press('Enter');
+  }
   // a pull's button keeps focus when the list is rebuilt under it
   const c2974 = page.locator('.pull', { hasText: '3rd gear · 2,974' }).locator('button.r2');
   await c2974.click();
@@ -1393,10 +1454,48 @@ try {
   // watch folder (browser mode takes a typed path)
   const watch = join(tmp, 'incoming');
   mkdirSync(watch);
-  await logAction(logAt('1:36 pm'), 'Remove');
-  await logAction(logAt('1:36 pm'), 'Confirm');
+  // the 1:36 pm log has no pull: it is replayed, which opens it, then removed from the keyboard. The log after it takes its place
+  await logAction(logAt('1:36 pm'), 'Replay');
+  const removal = await page.evaluate(() => {
+    const s = window.__logViewer;
+    const next = s.logs[1];
+    return {
+      replayed: s.focus.log.name,
+      closed: [...document.querySelectorAll('#logs .log-toggle[aria-expanded="false"]')].map(b => b.dataset.key),
+      runA: s.runs[0]?.key,
+      next: (s.pulls.some(p => p.log === next) ? 'replay|' : 'open|') + next.key,
+    };
+  });
+  const remove136 = page.locator('#logs .log', { hasText: logAt('1:36 pm') }).locator('.links button', { hasText: 'Remove' });
+  if (await remove136.count()) await remove136.focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
   await until(page, () => /^Removed PCLog_2026-04-17_0136pm\.csv/.test(document.getElementById('status').textContent));
   check('log removed', (await page.locator('#logs .log').count()) === 7);
+  const afterRemoval = await page.evaluate(closed => {
+    const s = window.__logViewer;
+    return {
+      focus: document.activeElement?.dataset?.fid ?? (document.activeElement === document.body ? 'nothing has focus' : '?'),
+      stillClosed: closed.every(
+        k => document.querySelector('#logs .log-toggle[data-key="' + k + '"]')?.getAttribute('aria-expanded') === 'false',
+      ),
+      shows: s.focus?.pull?.key,
+    };
+  }, removal.closed);
+  check(
+    'removing a log from the keyboard puts focus on the log that took its place',
+    /^open\|PCLog_2026-04-17_0140pm\.csv/.test(removal.next) && afterRemoval.focus === removal.next,
+    JSON.stringify([removal.next, afterRemoval.focus]),
+  );
+  check(
+    'removing the replayed log shows run A, and opens no log that was closed',
+    removal.replayed === 'PCLog_2026-04-17_0136pm.csv' &&
+      removal.closed.length === 3 &&
+      !!removal.runA &&
+      afterRemoval.stillClosed &&
+      afterRemoval.shows === removal.runA,
+    JSON.stringify([removal, afterRemoval]),
+  );
   // the removed log is still in the folder: it must not come back. A duplicate and a non-log are passed over too.
   copyFileSync(logs[0], join(watch, 'PCLog_2026-04-17_0136pm.csv'));
   copyFileSync(logs[1], join(watch, 'duplicate-of-0140.csv'));
@@ -1641,6 +1740,8 @@ try {
         box: rail.scrollTop,
         page: scrollY,
         jump: getComputedStyle(rail).scrollBehavior === 'auto',
+        // and nothing in the app scrolled an element with an animation
+        smooth: window.__scrolls.filter(c => c.behavior === 'smooth').length,
       };
     });
   };
@@ -1692,10 +1793,38 @@ try {
       focus: document.activeElement?.dataset?.fid === fid,
     };
   }, lastRun?.fid);
+  // a log added later does not scroll the list to run A again: the box is at its top, and a log is imported
+  await page.setInputFiles('#file', [
+    {
+      name: 'Added later.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(
+        '%DataLog%\nChannel : RPM\nType : EngineSpeed\nChannel : Vehicle Speed\nType : Speed\n12:00:00.000,900,0\n12:00:00.050,910,0\n',
+      ),
+    },
+  ]);
+  const addedShown = await until(page, () => document.querySelectorAll('#logs .log').length === 9);
+  const afterAdd = await page.evaluate(() => {
+    const rail = document.querySelector('.rail');
+    return { box: rail.scrollTop, room: rail.scrollHeight - rail.clientHeight, page: scrollY };
+  });
+  // the library goes back to eight logs for the checks after this one
+  await logAction('Added later', 'Remove');
+  await logAction('Added later', 'Confirm');
+  const addedGone = await until(page, () => document.querySelectorAll('#logs .log').length === 8);
+  // it was the last log: focus goes to the one before it, the 1:55 pm log, which has a pull
+  const beforeLast = 'replay|PCLog_2026-04-17_0155pm.csv|20260417 01:55:10';
+  const focusBeforeLast = await until(page, fid => document.activeElement?.dataset?.fid === fid, beforeLast);
   await page.close();
+  check('removing the last log puts focus on the one before it', focusBeforeLast, beforeLast);
+  check(
+    'a log added later does not scroll the list to run A again',
+    addedShown && addedGone && afterAdd.room > 0 && afterAdd.box === 0 && afterAdd.page === 0,
+    JSON.stringify([addedShown, addedGone, afterAdd]),
+  );
   check(
     'at 1400 × 700 the list scrolls its own box to run A, without animating, and the page does not move',
-    listAt700.inside && listAt700.box > 0 && listAt700.page === 0 && listAt700.jump,
+    listAt700.inside && listAt700.box > 0 && listAt700.page === 0 && listAt700.jump && listAt700.smooth === 0,
     JSON.stringify(listAt700),
   );
   check(
@@ -1837,12 +1966,58 @@ try {
       text: '%DataLog%\nChannel : RPM\nType : EngineSpeed\nChannel : Vehicle Speed\nType : Speed\n12:00:00.000,800,0\n12:00:00.050,810,0\n',
     }),
   });
+  // and another, undated and named at length: it sorts before the first, which stays last
+  const longUndated =
+    'An undated log with a file name too long for the list to show on one line, so its title must wrap when it is open.csv';
+  await fetch(url + 'api/load_text', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: longUndated,
+      text: '%DataLog%\nChannel : RPM\nType : EngineSpeed\nChannel : Vehicle Speed\nType : Speed\n12:00:00.000,820,0\n12:00:00.050,830,0\n',
+    }),
+  });
   page = await open();
   await settle(page);
   const undated = await page.evaluate(() => {
     const log = [...document.querySelectorAll('#logs .log')].pop();
     return [log.querySelector('.ttl')?.textContent, !!log.querySelector('.file'), log.querySelector('.why')?.textContent].join(' / ');
   });
+  // a title too long for the line is cut while the log is closed, and its whole file name is in the button's title; open, it wraps
+  const titleWhole = () =>
+    page.evaluate(() => {
+      const b = [...document.querySelectorAll('#logs .log-toggle')].find(t =>
+        t.querySelector('.ttl').textContent.startsWith('An undated log'),
+      );
+      const t = b?.querySelector('.ttl');
+      return b && t
+        ? {
+            title: b.title,
+            expanded: b.getAttribute('aria-expanded'),
+            cut: t.scrollWidth > t.clientWidth,
+            height: Math.round(t.getBoundingClientRect().height),
+            // the rail does not scroll sideways for it
+            railFits: document.querySelector('.rail').scrollWidth <= document.querySelector('.rail').clientWidth,
+          }
+        : null;
+    });
+  const longClosed = await titleWhole();
+  await toggleOf('An undated log').click();
+  const longOpen = await titleWhole();
+  check(
+    'a long title is cut while the log is closed, with its file name on the button, and wraps whole when it is open, and the rail does not scroll sideways',
+    longClosed?.title === longUndated &&
+      longClosed.expanded === 'false' &&
+      longClosed.cut &&
+      longClosed.railFits &&
+      longOpen?.expanded === 'true' &&
+      !longOpen.cut &&
+      longOpen.railFits &&
+      longOpen.height > longClosed.height,
+    JSON.stringify([longClosed, longOpen]),
+  );
+  await logAction('An undated log', 'Remove');
+  await logAction('An undated log', 'Confirm');
+  await until(page, () => document.querySelectorAll('#logs .log').length === 9);
   await logAction('Undated drive', 'Remove');
   await logAction('Undated drive', 'Confirm');
   await until(page, () => document.querySelectorAll('#logs .log').length === 8);
