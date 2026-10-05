@@ -34,10 +34,19 @@ const MIN_PEDAL: f64 = 15.0;
 const MIN_SPEED: f64 = 12.0;
 const MIN_DUR: f64 = 1.2;
 const MIN_GAIN: f64 = 700.0;
+const MIN_GEAR: f64 = 1.0;
+
+/// A length in seconds as whole milliseconds. Row times are whole milliseconds over 1,000, so two of them can subtract to
+/// a hair under their exact difference (1.1999999999999997 for 1,200 ms): lengths are compared in whole milliseconds,
+/// never as that difference.
+fn millis(seconds: f64) -> f64 {
+    (seconds * 1000.0).round()
+}
 
 /// The stretches where the rule for a pull holds at every sample: the accelerator pedal at `MIN_PEDAL` or more, the car
 /// at `MIN_SPEED` or more, in one gear, RPM rising. Each is the first and last sample of a stretch; the last is the latest
-/// sample that is not lower than the one before it, so a stretch can end below its highest RPM.
+/// sample that is not lower than the one before it, or the first, if every later one is lower, so a stretch can end below
+/// its highest RPM.
 fn stretches(log: &Log) -> Vec<(usize, usize)> {
     let (ch, n) = (&log.ch, log.n);
     let mut out = Vec::new();
@@ -47,7 +56,7 @@ fn stretches(log: &Log) -> Vec<(usize, usize)> {
     let ok = |i: usize| {
         ch.pedal[i] >= MIN_PEDAL
             && ch.vss[i] >= MIN_SPEED
-            && ch.gear[i] >= 1.0
+            && ch.gear[i] >= MIN_GEAR
             && ch.rpm[(i + 3).min(n - 1)] > ch.rpm[i.saturating_sub(3)]
     };
     let mut s: Option<usize> = None;
@@ -76,7 +85,7 @@ pub fn detect_pulls(log: &Log) -> Vec<Pull> {
     let mut pulls = Vec::new();
     for (a, b) in stretches(log) {
         let (dur, gain) = (t[b] - t[a], ch.rpm[b] - ch.rpm[a]);
-        if dur >= MIN_DUR && gain >= MIN_GAIN {
+        if millis(dur) >= millis(MIN_DUR) && gain >= MIN_GAIN {
             // the peak pressure starts as NaN, so a pull with no reading of it has none (null in JSON); a pull always has
             // pedal readings, at MIN_PEDAL or more
             let (mut pk, mut mp, mut tp) = (0.0f64, f64::NAN, 0.0f64);
@@ -121,7 +130,7 @@ pub fn pull_rule() -> String {
 /// never moving.
 pub fn why_no_pull(log: &Log) -> String {
     let (t, ch) = (&log.t, &log.ch);
-    let in_gear = ch.gear.iter().any(|&g| g >= 1.0);
+    let in_gear = ch.gear.iter().any(|&g| g >= MIN_GEAR);
     let moved = ch.vss.iter().any(|&v| v >= MIN_SPEED);
     // NaN when the log has no reading of the pedal at all
     let pedal = ch.pedal.iter().copied().fold(f64::NAN, f64::max);
@@ -151,10 +160,15 @@ pub fn why_no_pull(log: &Log) -> String {
             num(MIN_PEDAL)
         );
     }
-    // the longest stretch of two samples or more; the first of two as long
+    // the longest stretch of two samples or more that gained RPM; the first of two as long. `!(gain > 0.0)` is also true
+    // for NaN: a stretch with no reading of RPM at an end has no gain
     let mut longest: Option<(usize, usize)> = None;
     for (a, b) in stretches(log) {
-        if b > a && longest.is_none_or(|(x, y)| t[b] - t[a] > t[y] - t[x]) {
+        let gain = ch.rpm[b] - ch.rpm[a];
+        if b <= a || !(gain > 0.0) {
+            continue;
+        }
+        if longest.is_none_or(|(x, y)| millis(t[b] - t[a]) > millis(t[y] - t[x])) {
             longest = Some((a, b));
         }
     }
@@ -168,7 +182,7 @@ pub fn why_no_pull(log: &Log) -> String {
     // a stretch just short of the time a pull needs is never written as that time: 1.17 s, not 1.2 s
     let lasted = (1..=3)
         .map(|d| fx(dur, d))
-        .find(|s| dur >= MIN_DUR || s.parse::<f64>().is_ok_and(|v| v < MIN_DUR))
+        .find(|s| millis(dur) >= millis(MIN_DUR) || s.parse::<f64>().is_ok_and(|v| v < MIN_DUR))
         .unwrap_or_else(|| fx(dur, 3));
     format!(
         "No pulls: the longest stretch of rising RPM in one gear lasted {lasted} s and gained {} rpm. A pull needs {} s and {} rpm.",
@@ -222,7 +236,7 @@ pub fn tire_circ(size: &str) -> f64 {
 
 /// Metres per second of road speed per engine rpm from gearing, or NaN if the gearing is not known.
 pub fn kv_from_gearing(veh: &Vehicle, gear: f64) -> f64 {
-    if !(gear >= 1.0) {
+    if !(gear >= MIN_GEAR) {
         return f64::NAN;
     }
     let g = veh

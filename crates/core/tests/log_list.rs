@@ -341,9 +341,9 @@ fn a_stretch_of_one_sample_is_not_a_stretch_of_rising_rpm() {
 #[test]
 fn of_two_stretches_as_long_the_first_is_named() {
     // 500 ms a row, a step a float holds exactly, so the two lengths are equal to the bit. RPM rises 20 a row over the
-    // 10th to 19th rows, to 3,200, and holds; it falls to 3,000 at the 31st row; it rises 40 a row over the 51st to 60th
-    // rows, to 3,400, and holds. The rule compares RPM three rows either side, so each stretch is 14 rows, 7 s: the
-    // first from the 8th row to the 22nd, gaining 200 rpm, the second from the 48th to the 62nd, gaining 400 rpm
+    // 11th to 20th rows, to 3,200, and holds; it falls to 3,000 at the 31st row; it rises 40 a row over the 51st to 60th
+    // rows, to 3,400, and holds. The rule compares RPM three rows either side, so each stretch is 15 rows, 14 steps, 7 s:
+    // the first from the 8th row to the 22nd, gaining 200 rpm, the second from the 48th to the 62nd, gaining 400 rpm
     let rpm: Vec<f64> = (0..100)
         .map(|i| match i {
             0..=9 => 3000.0,
@@ -358,6 +358,154 @@ fn of_two_stretches_as_long_the_first_is_named() {
         why(&drive(500, rpm, Some(2.0), 300.0, Some(500.0))),
         "No pulls: the longest stretch of rising RPM in one gear lasted 7.0 s and gained 200 rpm. A pull needs 1.2 s and 700 rpm."
     );
+}
+
+/// One log of `rpm.len()` rows at `ms`, in gear 2 at 30 km/h, with the accelerator pedal at 50% on the rows in `on` (each
+/// a first and a last row, both in) and released on the others. The rule for a pull holds on those rows alone wherever
+/// RPM is rising, so each range is one stretch.
+fn pressed(ms: usize, rpm: Vec<f64>, on: &[(usize, usize)]) -> String {
+    let n = rpm.len();
+    let pedal = (0..n)
+        .map(|i| {
+            let held = on.iter().any(|&(a, b)| (a..=b).contains(&i));
+            if held {
+                500.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    nsp(
+        Some("20260417 01:00:00"),
+        "13:00",
+        ms,
+        &[
+            ("RPM", "EngineSpeed", rpm),
+            ("Vehicle Speed", "Speed", vec![300.0; n]),
+            ("Gear", "Gear", vec![2.0; n]),
+            (
+                "Drive By Wire Accelerator Pedal Position",
+                "Percentage",
+                pedal,
+            ),
+        ],
+    )
+}
+
+/// A log with one stretch of exactly 1,200 ms, on a 10 ms grid, from the 69th row to the 189th, where RPM rises `step`
+/// a row. Row times are held as milliseconds over 1,000, so the subtraction of these two (0.68 s and 1.88 s) is
+/// 1.1999999999999997, below the 1.2 the rule is written with. The test of that premise is here, so a change in how the
+/// log holds its times cannot quietly leave the edge untested.
+fn at_the_edge(step: f64) -> String {
+    let rpm: Vec<f64> = (0..250).map(|i| 3000.0 + step * i as f64).collect();
+    let text = pressed(10, rpm, &[(68, 188)]);
+    let mut s = Session::memory();
+    s.load_text("t.csv", &text).unwrap();
+    let t = &s.logs()[0].t;
+    assert!(t[188] - t[68] < 1.2, "{}", t[188] - t[68]);
+    assert_eq!(((t[188] - t[68]) * 1000.0).round(), 1200.0);
+    text
+}
+
+#[test]
+fn a_stretch_of_exactly_the_time_a_pull_needs_is_a_pull_whatever_the_float_says() {
+    let mut s = Session::memory();
+    // RPM rises 10 a row: 1,200 rpm
+    s.load_text("t.csv", &at_the_edge(10.0)).unwrap();
+    let overview = call(&mut s, "overview", json!({})).unwrap();
+    let pulls = overview["pulls"].as_array().unwrap();
+    assert_eq!(pulls.len(), 1, "{}", overview["noPulls"]);
+    assert_eq!(
+        (pulls[0]["i0"].as_u64(), pulls[0]["i1"].as_u64()),
+        (Some(68), Some(188))
+    );
+    assert_eq!(overview["noPulls"], json!([]));
+}
+
+#[test]
+fn a_stretch_of_exactly_the_time_a_pull_needs_with_too_little_gain_lasted_1_2_s() {
+    // RPM rises 5 a row: 600 rpm, under the 700 a pull needs
+    assert_eq!(
+        why(&at_the_edge(5.0)),
+        "No pulls: the longest stretch of rising RPM in one gear lasted 1.2 s and gained 600 rpm. A pull needs 1.2 s and 700 rpm."
+    );
+}
+
+#[test]
+fn of_two_stretches_as_long_at_50_ms_a_row_the_first_is_named_whatever_the_floats_say() {
+    // two stretches of 15 rows, 14 steps, 0.7 s: rows 28 to 42 (RPM rising 15 a row, 210 rpm) and rows 44 to 58 (30 a
+    // row, 420 rpm), with the pedal released on row 43. The row times are held as milliseconds over 1,000, so the first
+    // length is 0.6999999999999997 and the second 0.7000000000000002: the second is the longer by float, equal by the
+    // millisecond
+    let rpm: Vec<f64> = (0..100)
+        .map(|i| match i {
+            0..=42 => 3000.0 + 15.0 * i as f64,
+            _ => 3000.0 + 15.0 * 42.0 + 30.0 * (i - 42) as f64,
+        })
+        .collect();
+    let text = pressed(50, rpm, &[(27, 41), (43, 57)]);
+    let mut s = Session::memory();
+    s.load_text("t.csv", &text).unwrap();
+    let t = &s.logs()[0].t;
+    let (first, second) = (t[41] - t[27], t[57] - t[43]);
+    assert!(first < second, "{first} {second}");
+    assert_eq!(why(&text), "No pulls: the longest stretch of rising RPM in one gear lasted 0.7 s and gained 210 rpm. A pull needs 1.2 s and 700 rpm.");
+}
+
+/// 100 ms a row. The first stretch, from the 6th row to the one after `last`, is the longest by time, 0.2 s or 0.3 s, and
+/// has no gain. RPM is the first nine rows as given, then rises 20 a row, so the rule, which compares RPM three rows
+/// either side and not the stretch's own ends, holds; the stretch on the 21st and 22nd rows, 0.1 s, gained 20 rpm. The
+/// reason names that one and never writes a gain as "–" or with a minus; alone, the first stretch leaves RPM never
+/// rising.
+fn a_stretch_that_gained_nothing_is_not_named(head: [f64; 9], last: usize) {
+    let rpm = || -> Vec<f64> {
+        (0..40)
+            .map(|i| {
+                if i < 9 {
+                    head[i]
+                } else {
+                    3300.0 + 20.0 * (i - 9) as f64
+                }
+            })
+            .collect()
+    };
+    let reason = why(&pressed(100, rpm(), &[(5, last), (20, 21)]));
+    assert_eq!(
+        reason,
+        "No pulls: the longest stretch of rising RPM in one gear lasted 0.1 s and gained 20 rpm. A pull needs 1.2 s and 700 rpm."
+    );
+    assert!(!reason.contains('–') && !reason.contains('-'), "{reason}");
+    assert_eq!(why(&pressed(100, rpm(), &[(5, last)])), NEVER_ROSE);
+}
+
+#[test]
+fn a_stretch_that_starts_on_a_sample_with_no_reading_is_not_the_one_named() {
+    let head = [
+        1000.0, 1000.0, 1000.0, 1000.0, 1000.0, NONE, 3000.0, 3100.0, 3200.0,
+    ];
+    // the premise: the first stretch starts on the sixth row, which has no reading
+    let mut s = Session::memory();
+    s.load_text("t.csv", &pressed(100, head.to_vec(), &[(5, 7)]))
+        .unwrap();
+    assert!(s.logs()[0].ch.rpm[5].is_nan());
+    a_stretch_that_gained_nothing_is_not_named(head, 7);
+}
+
+#[test]
+fn a_stretch_with_no_change_in_rpm_is_not_the_one_named() {
+    let head = [
+        1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 3000.0, 3000.0, 3000.0, 3000.0,
+    ];
+    a_stretch_that_gained_nothing_is_not_named(head, 7);
+}
+
+#[test]
+fn a_stretch_that_ends_lower_than_it_starts_is_not_the_one_named() {
+    // 3,100 rpm on the 6th row, 2,950 on the 9th, which is not lower than the 8th: the stretch ends there, 150 rpm lower
+    let head = [
+        1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 3100.0, 3000.0, 2900.0, 2950.0,
+    ];
+    a_stretch_that_gained_nothing_is_not_named(head, 8);
 }
 
 #[test]

@@ -202,7 +202,8 @@ impl Session {
             .ok_or_else(|| "That log is not loaded.".to_string())
     }
 
-    /// The library's order: by start, oldest first, then by file name; logs with no start last, by file name.
+    /// The library's order: by start, oldest first, then by file name; logs with no start last, by file name. The start is
+    /// compared as text, which compares the times only because it is zero-padded `YYYY-MM-DDThh:mm:ss`.
     fn refresh(&mut self) {
         let order = |l: &Log| (l.started_at.is_none(), l.started_at.clone(), l.name.clone());
         self.logs.sort_by_cached_key(order);
