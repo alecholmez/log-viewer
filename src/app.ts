@@ -549,7 +549,27 @@ function renderLogs(): void {
     ol.appendChild(li);
   });
   syncLogs();
-  if (had) [...ol.querySelectorAll<HTMLElement>('[data-fid]')].find(e => e.dataset.fid === had)?.focus();
+  if (had) [...ol.querySelectorAll<HTMLElement>('[data-fid]')].find(e => e.dataset.fid === had)?.focus({ preventScroll: true });
+}
+
+/**
+ * Scroll the list so run A's pull is in view: the list's own box only, never the page, and without animation. Nothing
+ * when there is no run A. The box is the rail beside the charts, or the list itself in one column.
+ */
+function showRunA(): void {
+  const p = S.runs[0];
+  const row =
+    p && [...document.querySelectorAll<HTMLElement>('#logs [data-fid]')].find(e => e.dataset.fid === 'run0|' + p.key)?.closest('.pull');
+  let box = row ? row.parentElement : null;
+  while (box && !(box.scrollHeight > box.clientHeight && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+  if (!row || !box) return;
+  const r = row.getBoundingClientRect();
+  const b = box.getBoundingClientRect();
+  // the part of the box on screen: the rail can reach below the window until the page scrolls
+  const top = Math.max(b.top, 0);
+  const bottom = Math.min(b.bottom, window.innerHeight);
+  if (r.bottom > bottom) box.scrollTop += r.bottom - bottom + 12;
+  else if (r.top < top) box.scrollTop -= top - r.top + 12;
 }
 
 // ---------- stats, legend, findings ----------
@@ -1745,6 +1765,9 @@ async function openLibrary(): Promise<void> {
   try {
     await reload();
     clearMessage(LIBRARY_FAILED);
+    // the list opens on run A, once: after this the person is looking at the list already. Measured once the fonts are in
+    await document.fonts.ready;
+    showRunA();
   } catch (e) {
     $('sub').textContent = 'The library could not be opened';
     fail(LIBRARY_FAILED + errText(e), { label: 'Try again', run: () => void openLibrary() });

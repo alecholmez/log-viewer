@@ -1627,6 +1627,47 @@ try {
     check('Replay scrolls with behavior ' + want + ' when Reduce Motion is ' + reducedMotion, behavior === want, String(behavior));
     await page.close();
   }
+  // the list opens on run A: its own box scrolls to it, never the page, once
+  /** A new window: whether run A's pull is inside the part of the list's box on screen, how far the box and the page are scrolled. */
+  const runAView = async (width, height) => {
+    page = await open({ viewport: { width, height } });
+    await settle(page);
+    return page.evaluate(() => {
+      const rail = document.querySelector('.rail');
+      const b = rail.getBoundingClientRect();
+      const row = document.querySelector('#logs .pull button.r0[aria-pressed="true"]')?.closest('.pull').getBoundingClientRect();
+      return {
+        inside: !!row && row.top >= Math.max(b.top, 0) && row.bottom <= Math.min(b.bottom, innerHeight),
+        box: rail.scrollTop,
+        page: scrollY,
+        jump: getComputedStyle(rail).scrollBehavior === 'auto',
+      };
+    });
+  };
+  const listAt900 = await runAView(1400, 900);
+  await page.close();
+  check(
+    'at 1400 × 900 run A is in the list when the app opens, and the page has not moved',
+    listAt900.inside && listAt900.page === 0,
+    JSON.stringify(listAt900),
+  );
+  const listAt700 = await runAView(1400, 700);
+  // choosing a run later does not scroll the list again
+  await page.evaluate(() => (document.querySelector('.rail').scrollTop = 0));
+  await page.locator('.pull', { hasText: '2nd gear · 2,157' }).locator('button.r0').click();
+  await settle(page);
+  const listAfterRun = await page.evaluate(() => document.querySelector('.rail').scrollTop);
+  await page.close();
+  check(
+    'at 1400 × 700 the list scrolls its own box to run A, without animating, and the page does not move',
+    listAt700.inside && listAt700.box > 0 && listAt700.page === 0 && listAt700.jump,
+    JSON.stringify(listAt700),
+  );
+  check(
+    'choosing a run does not scroll the list again',
+    listAt700.box > 0 && listAfterRun === 0,
+    JSON.stringify([listAt700.box, listAfterRun]),
+  );
   // fitting the screen: with the default view and pull, the replay from the transport to the time axis fits the window,
   // with plots from 34 to 53 px; when it cannot, the page scrolls and the transport stays at the top of the window
   const fit = async (width, height, picker = false) => {
