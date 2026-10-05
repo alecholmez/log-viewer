@@ -89,7 +89,7 @@ h3{font-size:1.1875rem;font-weight:700;line-height:1.25}
 /* sections */
 .section{padding-block:var(--section)}
 .section-head{max-width:44rem}
-.section-head p{margin-top:16px;max-width:54ch;font-size:1.1875rem}
+.section-head p{margin-top:16px;max-width:54ch;font-size:1.1875rem;text-wrap:pretty}
 .section-head .link{margin-top:26px}
 /* a section that opens with the redline is divided from the one above by it, not by padding */
 .section:has(> .wrap > .redline){padding-top:0}
