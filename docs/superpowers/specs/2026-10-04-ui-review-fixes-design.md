@@ -76,7 +76,7 @@ Today 17 places write to one line in the header. The header scrolls away, and a 
 | `Reading <file>` | in progress | |
 | `Added N logs, M new pulls.` | result; a failure when a file was refused, so the refusal stays on screen | |
 | `Removed <log> from the library. The original file is untouched.` | result | |
-| `Added N logs from the watch folder.`, `No new logs in the watch folder.` | result; a failure when the scan reports an error | |
+| `Added N logs from the watch folder.`, `No new logs in the watch folder.` | result; a failure when the scan reports an error. A scan made when the window comes to the front does not show the same failure twice, and a scan that works clears that failure if it is still on screen | |
 | `Stopped watching. Logs already added stay in the library.` | result | |
 | A message from the shell when a file is opened with the app | result | |
 | `Power estimate failed: …` | failure | `Try again` asks for the estimate again |

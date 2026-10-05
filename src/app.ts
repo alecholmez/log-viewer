@@ -1149,8 +1149,13 @@ async function addFiles(files: File[]): Promise<void> {
 }
 
 let lastScan = 0;
+/** The text of the last scan failure shown; '' once a scan has worked. */
+let scanFailure = '';
 
-/** Import NSP logs that appeared in the watch folder. */
+/**
+ * Import NSP logs that appeared in the watch folder. A quiet scan is one the person did not ask for, made when the
+ * window comes to the front: it says only what is new.
+ */
 async function scanWatch(quiet: boolean): Promise<void> {
   if (!S.watchDir || busy) return;
   busy = true;
@@ -1158,18 +1163,32 @@ async function scanWatch(quiet: boolean): Promise<void> {
   try {
     const r = await api.scanDir(S.watchDir);
     if (r.added.length) await reload();
-    if (r.added.length || r.errors.length || !quiet) {
-      const text =
-        (r.added.length
-          ? 'Added ' + r.added.length + (r.added.length > 1 ? ' logs' : ' log') + ' from the watch folder. '
-          : 'No new logs in the watch folder. ') + r.errors.join(' ');
-      if (r.errors.length) fail(text);
-      else say(text);
+    const text =
+      (r.added.length
+        ? 'Added ' + r.added.length + (r.added.length > 1 ? ' logs' : ' log') + ' from the watch folder. '
+        : 'No new logs in the watch folder. ') + r.errors.join(' ');
+    if (r.errors.length) scanFailed(text, quiet);
+    else {
+      scanWorked();
+      if (r.added.length || !quiet) say(text);
     }
   } catch (e) {
-    fail(errText(e));
+    scanFailed(errText(e), quiet);
   }
   busy = false;
+}
+
+/** Show a scan's failure. A quiet scan does not show the text the person has been shown already. */
+function scanFailed(text: string, quiet: boolean): void {
+  if (quiet && text === scanFailure) return;
+  scanFailure = text;
+  fail(text);
+}
+
+/** A scan with no failure clears the failure of an earlier one, if it is still on screen. */
+function scanWorked(): void {
+  if (scanFailure) clearMessage(scanFailure);
+  scanFailure = '';
 }
 
 function renderWatch(): void {

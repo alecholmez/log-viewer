@@ -5,7 +5,7 @@
 // Starts the dev server on a throwaway library, imports the logs in testdata/logs through the UI and walks the main flows.
 // Set CHROME=/path/to/chrome to use a browser Playwright did not download. Pass a directory to save screenshots there.
 
-import { mkdirSync, copyFileSync } from 'node:fs';
+import { mkdirSync, copyFileSync, renameSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { root, logs, startServer, libraryOpen, importLogs } from './server.mjs';
@@ -947,6 +947,42 @@ try {
       () => false,
     );
   check('a result clears itself after Dismiss from the keyboard', clearedAfterKeyboardDismiss);
+  // a watch-folder failure the person has dismissed does not come back each time the window comes to the front,
+  // and a scan that works clears one that is still on screen
+  const goneDir = watch + '-gone';
+  let ahead = 0;
+  /** The window comes to the front, more than 5 s after the last scan: the app scans on its own. Resolves once the core has answered. */
+  const toFront = async () => {
+    const answered = page.waitForResponse(r => r.url().endsWith('/api/scan_dir'));
+    await page.evaluate(
+      ms => {
+        const now = Date.now;
+        Date.now = () => now() + ms;
+        window.dispatchEvent(new Event('focus'));
+        Date.now = now;
+      },
+      (ahead += 60000),
+    );
+    await (await answered).finished();
+    await settle(page);
+  };
+  renameSync(watch, goneDir);
+  await toFront();
+  const scanFailure = await text(page, 'status');
+  await page.click('#msg-x');
+  await toFront();
+  const afterDismiss = await text(page, 'status');
+  check(
+    'a watch-folder failure that was dismissed does not come back when the window comes to the front',
+    /^Cannot read /.test(scanFailure) && afterDismiss === '',
+    JSON.stringify([scanFailure, afterDismiss]),
+  );
+  // a scan the person asks for always says what happened
+  await page.click('#watch-scan');
+  await page.waitForFunction(() => /^Cannot read /.test(document.getElementById('status').textContent));
+  renameSync(goneDir, watch);
+  await toFront();
+  check('a scan that works clears the watch-folder failure', (await text(page, 'status')) === '', await text(page, 'status'));
   await page.close();
   // a saved value that is out of range, as from a hand-edited settings file: shown with its line, and the default is used
   page = await open();
@@ -972,6 +1008,10 @@ try {
       atStart.btn === 'Vehicle · 2,902 lb · check 1 field' &&
       atStart.lb === 2902,
     JSON.stringify(atStart),
+  );
+  check(
+    'the Vehicle button is named by its text, so a screen reader hears the count',
+    (await page.getByRole('button', { name: 'Vehicle · 2,902 lb · check 1 field', exact: true }).count()) === 1,
   );
   await page.waitForTimeout(600); // the settings written now hold the default again, for the pages below
   await page.close();
