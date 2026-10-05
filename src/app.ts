@@ -36,6 +36,7 @@ import {
   focusSpan,
   hideTip,
   inkOn,
+  lengthLabel,
   logDefault,
   logName,
   pullDefault,
@@ -207,6 +208,8 @@ async function reload(): Promise<void> {
   S.pulls = ov.pulls.map(p => ({ ...p, log: byKey.get(p.logKey)! }));
   S.tables = { coarse: fixTable(ov.coarse), fine: fixTable(ov.fine) };
   S.findings = attach(ov.findings);
+  S.pullRule = ov.pullRule;
+  S.noPulls = new Map(ov.noPulls.map(r => [r.logKey, r.reason]));
   $('sub').textContent = logs.length
     ? logs.length +
       (logs.length === 1 ? ' log · ' : ' logs · ') +
@@ -340,6 +343,9 @@ function renderLogs(): void {
   // an empty library shows one panel that says how to start, in place of the charts
   document.querySelector('.app')!.classList.toggle('no-logs', !S.logs.length);
   $('start').hidden = S.logs.length > 0;
+  // what a pull is: one line under the panel title while the library has logs
+  $('pull-rule').textContent = S.pullRule;
+  $('pull-rule').hidden = !S.logs.length;
   if (!S.logs.length) {
     const li = el('li', 'empty');
     li.appendChild(el('p', '', 'Logs you add are listed here.'));
@@ -349,12 +355,11 @@ function renderLogs(): void {
   for (const log of S.logs) {
     const li = el('li', 'log');
     const head = el('div', 'log-head');
-    const txt = el('div');
+    const txt = el('div', 'log-text');
     const ttl = el('div', 'ttl', logName(log));
     txt.appendChild(ttl);
-    txt.appendChild(
-      el('div', 'meta', (S.names.logs[log.key] ? logDefault(log) + ' · ' : '') + fmt(log.duration) + ' s · ' + fmt(log.n) + ' samples'),
-    );
+    // the length; a log the person named also keeps its date and time here
+    txt.appendChild(el('div', 'meta', (S.names.logs[log.key] ? logDefault(log) + ' · ' : '') + lengthLabel(log.duration)));
     const acts = el('div', 'links');
     acts.appendChild(
       linkBtn('Replay', () => {
@@ -393,11 +398,17 @@ function renderLogs(): void {
     );
     head.appendChild(txt);
     head.appendChild(acts);
+    // the file name on its own line, unless the log is titled by it
+    if (log.startedAt) {
+      const file = el('div', 'file', log.name);
+      file.title = log.name;
+      head.appendChild(file);
+    }
     li.appendChild(head);
 
     const pulls = S.pulls.filter(p => p.log === log).sort((a, b) => a.t0 - b.t0);
     const pl = el('ol', 'pulls');
-    if (!pulls.length) pl.appendChild(el('li', 'meta', 'No pulls in this log.'));
+    if (!pulls.length) pl.appendChild(el('li', 'meta why', S.noPulls.get(log.key) ?? ''));
     for (const p of pulls) {
       const slot = S.runs.indexOf(p);
       const row = el('li', 'pull' + (slot >= 0 ? ' on' : ''));

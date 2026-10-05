@@ -105,6 +105,9 @@ input[type="text"],input[type="number"],input[type="search"],select{font:inherit
 .logs{display:grid;gap:12px;margin-top:10px}
 .log-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center;padding-bottom:5px;border-bottom:1px solid var(--grid)}
 .log-head .ttl{font-weight:700;font-size:13.5px;overflow-wrap:anywhere}
+.log-text{min-width:0}
+/* the file name: its own line across the entry, cut with an ellipsis when it does not fit; the whole name is in its title */
+.log-head .file{grid-column:1 / -1;color:var(--ink-3);font-size:12px;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .meta{color:var(--ink-2);font-size:12px;font-variant-numeric:tabular-nums}
 .pulls{display:grid;gap:5px;margin-top:6px}
 .pull{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 8px;align-items:center;padding:6px 8px;border:1px solid transparent;border-radius:8px}

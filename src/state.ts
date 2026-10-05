@@ -281,6 +281,10 @@ export const S = {
   chipsShow: true,
   /** the name of the chosen chip, whose stretches are shaded behind the traces; null when none is chosen */
   chosen: null as string | null,
+  /** the core's sentence that says what a pull is */
+  pullRule: '',
+  /** the core's reason, by log key, for each log with no pull */
+  noPulls: new Map<string, string>(),
 };
 
 /** The view on screen: a finding's own channels while one is being shown, otherwise the user's working view. */
@@ -311,6 +315,11 @@ export function logDefault(log: Log): string {
   return log.startedAt ? startLabel(log.startedAt) : log.name.replace(/\.csv$/i, '');
 }
 export const logName = (log: Log) => S.names.logs[log.key] || logDefault(log);
+/** A log's length from its duration in seconds: under a minute as "41 s", otherwise "3 min 34 s". */
+export function lengthLabel(seconds: number): string {
+  const s = Math.round(seconds);
+  return s < 60 ? s + ' s' : Math.floor(s / 60) + ' min ' + (s % 60) + ' s';
+}
 export const pullDefault = (p: Pull) => (ORD[p.gear] || 'Gear ' + p.gear) + ' gear · ' + fmt(p.rpm0) + '–' + fmt(p.rpm1) + ' rpm';
 export const pullName = (p: Pull) => S.names.pulls[p.key] || pullDefault(p);
 

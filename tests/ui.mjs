@@ -159,6 +159,8 @@ try {
   const startAdd = page.locator('#start-add');
   const chooser = (await startAdd.count()) ? (await Promise.all([page.waitForEvent('filechooser'), startAdd.click()]))[0] : null;
   check('its button opens the file picker', chooser?.isMultiple() === true);
+  const ruleWaits = await page.evaluate(() => document.getElementById('pull-rule')?.hidden ?? null);
+  check('the sentence on what a pull is waits for logs', ruleWaits === true, String(ruleWaits));
   await shot(page, '01-empty');
 
   // import through the file input: one file that is not a log, then real logs
@@ -214,6 +216,78 @@ try {
     (await titleList(page)) ===
       ['1:36 pm', '1:40 pm', '1:42 pm', '1:44 pm', '1:45 pm', '1:46 pm', '1:48 pm', '1:55 pm'].map(logAt).join(' | '),
     await titleList(page),
+  );
+  // under each title its length, then its file name; no sample count
+  const logLines = await page.evaluate(() =>
+    [...document.querySelectorAll('#logs .log')].map(l => {
+      const file = l.querySelector('.log-head .file');
+      return [l.querySelector('.log-head .meta')?.textContent, file?.textContent, file?.title === file?.textContent].join(' / ');
+    }),
+  );
+  const lengths = ['1 min 10 s', '33 s', '18 s', '1 min 15 s', '45 s', '20 s', '33 s', '1 min 10 s'];
+  check(
+    'under each title its length, then its file name, and no sample count',
+    logLines.join(' | ') === lengths.map((l, i) => l + ' / ' + logs[i].split('/').pop() + ' / true').join(' | ') &&
+      !/samples/.test(await text(page, 'logs')),
+    logLines.join(' | '),
+  );
+  const ruleLine = await page.evaluate(() => {
+    const p = document.getElementById('pull-rule');
+    return p && !p.hidden ? p.textContent : null;
+  });
+  check(
+    'one line under the panel title says what a pull is',
+    ruleLine ===
+      'A pull is RPM rising in one gear, with the car moving and the accelerator pedal at 15% or more, for at least 1.2 s and 700 rpm.',
+    String(ruleLine),
+  );
+  const reasons = await page.evaluate(() =>
+    [...document.querySelectorAll('#logs .log')].map(l => l.querySelector('.why')?.textContent).filter(Boolean),
+  );
+  check(
+    'a log with no pull says why, in its own numbers',
+    reasons.join(' | ') ===
+      [
+        'No pulls: the car stayed out of gear and did not move.',
+        'No pulls: the car stayed out of gear and did not move. The accelerator pedal reached 54%.',
+        'No pulls: the car stayed out of gear and did not move.',
+        'No pulls: the accelerator pedal peaked at 14.7%, under the 15% a pull needs.',
+      ].join(' | '),
+    reasons.join(' | '),
+  );
+  // the quiet grey is --ink-3; the contrast is against the panel the name sits on
+  const fileInk = await page.evaluate(() => {
+    const quiet = getComputedStyle(document.documentElement).getPropertyValue('--ink-3').trim();
+    const files = [...document.querySelectorAll('#logs .file')];
+    return {
+      quiet: files.length > 0 && files.every(f => window.__contrast(getComputedStyle(f).color, quiet) === 1),
+      ink: files.map(f => +window.__contrast(getComputedStyle(f).color, getComputedStyle(f.closest('.panel')).backgroundColor).toFixed(2)),
+    };
+  });
+  check(
+    'the file name is in the quiet grey and reads on the panel',
+    fileInk.quiet && fileInk.ink.length === 8 && Math.min(...fileInk.ink) >= 4.5,
+    JSON.stringify(fileInk),
+  );
+  // a name too long for the rail stays on one line, cut with an ellipsis
+  const longName = await page.evaluate(() => {
+    const file = [...document.querySelectorAll('#logs .file')].find(f => f.offsetParent);
+    if (!file) return null;
+    const line = file.getBoundingClientRect().height;
+    file.textContent = 'A very long file name a person gave a log to say what it was for, on the back road, '.repeat(3) + '.csv';
+    const r = {
+      line,
+      now: file.getBoundingClientRect().height,
+      cut: file.scrollWidth > file.clientWidth,
+      ellipsis: getComputedStyle(file).textOverflow,
+    };
+    file.textContent = file.title;
+    return r;
+  });
+  check(
+    'a file name too long for the rail stays on one line, cut with an ellipsis',
+    !!longName && longName.now === longName.line && longName.cut && longName.ellipsis === 'ellipsis',
+    JSON.stringify(longName),
   );
 
   // the same file again is refused, not duplicated
@@ -562,6 +636,11 @@ try {
   await page.keyboard.type('Back road');
   await page.keyboard.press('Enter');
   check('log renamed', (await page.locator('#logs .log .ttl', { hasText: 'Back road' }).count()) === 1);
+  const backLine = await page.evaluate(() => {
+    const log = [...document.querySelectorAll('#logs .log')].find(l => l.querySelector('.ttl')?.textContent === 'Back road');
+    return log ? log.querySelector('.log-head .meta').textContent : null;
+  });
+  check('a renamed log keeps its date and time, before its length', backLine === logAt('1:45 pm') + ' · 45 s', String(backLine));
 
   // replay: playing moves the clock; by-RPM mode draws
   await page.locator('.pull', { hasText: '2,551–5,959' }).locator('button.r0').click();
@@ -1455,6 +1534,31 @@ try {
     JSON.stringify(spanEnds),
   );
 
+  // a log whose start the core cannot read is titled by its file name, has no file name line, and comes last. It is added
+  // through the core: a window that opens scans the watch folder, and files added while a scan runs are not imported
+  await fetch(url + 'api/load_text', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'Undated drive.csv',
+      text: '%DataLog%\nChannel : RPM\nType : EngineSpeed\nChannel : Vehicle Speed\nType : Speed\n12:00:00.000,800,0\n12:00:00.050,810,0\n',
+    }),
+  });
+  page = await open();
+  await settle(page);
+  const undated = await page.evaluate(() => {
+    const log = [...document.querySelectorAll('#logs .log')].pop();
+    return [log.querySelector('.ttl')?.textContent, !!log.querySelector('.file'), log.querySelector('.why')?.textContent].join(' / ');
+  });
+  await logAction('Undated drive', 'Remove');
+  await logAction('Undated drive', 'Confirm');
+  await until(page, () => document.querySelectorAll('#logs .log').length === 8);
+  await page.close();
+  check(
+    'a log with no date is titled by its file name, has no file name line, and comes last',
+    undated === 'Undated drive / false / No pulls: the car stayed out of gear and did not move.',
+    undated,
+  );
+
   // phone and tablet widths, dark mode: no sideways scroll, rail not sticky on a phone
   for (const [name, width, height] of [
     ['phone', 390, 844],
@@ -1488,10 +1592,14 @@ try {
     );
     const darkA = await textContrast(page, '.ab button.r0[aria-pressed="true"]');
     const darkNote = await textContrast(page, '.finding.info .ico');
+    const darkFile = await page.evaluate(() => {
+      const f = document.querySelector('#logs .file');
+      return f ? +window.__contrast(getComputedStyle(f).color, getComputedStyle(f.closest('.panel')).backgroundColor).toFixed(2) : 0;
+    });
     check(
-      name + ' in the dark theme: A and the Note badge read',
-      darkA.length === 1 && darkA[0] >= 4.5 && darkNote.length === 4 && darkNote[0] >= 4.5,
-      JSON.stringify([darkA, darkNote]),
+      name + ' in the dark theme: A, the Note badge and the file name read',
+      darkA.length === 1 && darkA[0] >= 4.5 && darkNote.length === 4 && darkNote[0] >= 4.5 && darkFile >= 4.5,
+      JSON.stringify([darkA, darkNote, darkFile]),
     );
     if (name === 'phone') {
       // the dark theme can also be chosen by attribute: that block must carry the same tokens as the system one
