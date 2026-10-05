@@ -1,4 +1,5 @@
-//! What the log list shows, as the core gives it: each log's start and the library's order.
+//! What the log list shows, as the core gives it: each log's start, the library's order, the sentence that says what a
+//! pull is, and why a log has no pull.
 
 mod common;
 
@@ -6,7 +7,7 @@ use std::fs;
 
 use common::{call, root, sample_session};
 use logviewer_core::Session;
-use serde_json::json;
+use serde_json::{json, Value};
 
 /// A small NSP log: the `Log :` header line (None for a log without one), then the channels as (name, NSP type, raw
 /// samples as NSP writes them: Speed and Percentage in tenths), one row every `ms` milliseconds from `clock`, which is
@@ -154,4 +155,169 @@ fn logs_are_listed_by_start_then_file_name_and_logs_with_no_start_come_last() {
             "zz-undated.csv",
         ]
     );
+}
+
+const RULE: &str = "A pull is RPM rising in one gear, with the car moving and the accelerator pedal at 15% or more, for at least 1.2 s and 700 rpm.";
+
+/// Each log with no pull as (file name, reason), in the library's order.
+fn no_pulls(s: &mut Session) -> Vec<(String, String)> {
+    let logs = call(s, "logs", json!({})).unwrap();
+    let name = |key: &Value| {
+        let log = logs.as_array().unwrap().iter().find(|l| l["key"] == *key);
+        log.unwrap()["name"].as_str().unwrap().to_string()
+    };
+    let overview = call(s, "overview", json!({})).unwrap();
+    let rows = overview["noPulls"].as_array().unwrap();
+    rows.iter()
+        .map(|r| {
+            (
+                name(&r["logKey"]),
+                r["reason"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn the_overview_says_what_a_pull_is() {
+    let mut s = Session::memory();
+    assert_eq!(
+        call(&mut s, "overview", json!({})).unwrap()["pullRule"],
+        RULE
+    );
+}
+
+#[test]
+fn each_sample_log_with_no_pull_says_why_in_its_own_numbers() {
+    let Some(mut s) = sample_session() else {
+        return;
+    };
+    let out_of_gear = "No pulls: the car stayed out of gear and did not move.";
+    let row = |name: &str, reason: &str| (name.to_string(), reason.to_string());
+    assert_eq!(
+        no_pulls(&mut s),
+        [
+            row("PCLog_2026-04-17_0136pm.csv", out_of_gear),
+            row(
+                "PCLog_2026-04-17_0140pm.csv",
+                &format!("{out_of_gear} The accelerator pedal reached 54%.")
+            ),
+            row("PCLog_2026-04-17_0142pm.csv", out_of_gear),
+            row(
+                "PCLog_2026-04-17_0148pm.csv",
+                "No pulls: the accelerator pedal peaked at 14.7%, under the 15% a pull needs."
+            ),
+        ]
+    );
+}
+
+/// One log of 2 s at 50 ms a row, or of `rpm.len()` rows at `ms`: RPM as given, and Gear, Vehicle Speed and the accelerator
+/// pedal each held at one raw value (Speed and Percentage in tenths). None leaves that channel out of the log.
+fn drive(ms: usize, rpm: Vec<f64>, gear: Option<f64>, speed: f64, pedal: Option<f64>) -> String {
+    let n = rpm.len();
+    let mut channels = vec![
+        ("RPM", "EngineSpeed", rpm),
+        ("Vehicle Speed", "Speed", vec![speed; n]),
+    ];
+    if let Some(g) = gear {
+        channels.push(("Gear", "Gear", vec![g; n]));
+    }
+    if let Some(p) = pedal {
+        channels.push((
+            "Drive By Wire Accelerator Pedal Position",
+            "Percentage",
+            vec![p; n],
+        ));
+    }
+    nsp(Some("20260417 01:00:00"), "13:00", ms, &channels)
+}
+
+/// Why this one log has no pull.
+fn why(text: &str) -> String {
+    let mut s = Session::memory();
+    s.load_text("t.csv", text).unwrap();
+    let rows = no_pulls(&mut s);
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    rows[0].1.clone()
+}
+
+/// What NSP writes for "no reading".
+const NONE: f64 = 2_147_483_647.0;
+
+#[test]
+fn a_log_out_of_gear_or_standing_still_says_so_and_says_when_the_pedal_was_pressed() {
+    let flat = || vec![3000.0; 40];
+    // no gear channel at all reads as never in gear
+    assert_eq!(
+        why(&drive(50, flat(), None, 0.0, Some(400.0))),
+        "No pulls: the car stayed out of gear and did not move. The accelerator pedal reached 40%."
+    );
+    assert_eq!(
+        why(&drive(50, flat(), Some(0.0), 300.0, Some(100.0))),
+        "No pulls: the car stayed out of gear."
+    );
+    assert_eq!(
+        why(&drive(50, flat(), Some(2.0), 100.0, Some(600.0))),
+        "No pulls: the car stayed under 12 km/h. The accelerator pedal reached 60%."
+    );
+    // a speed channel with no reading reads as never moving
+    assert_eq!(
+        why(&drive(50, flat(), Some(2.0), NONE, Some(200.0))),
+        "No pulls: the car stayed under 12 km/h. The accelerator pedal reached 20%."
+    );
+}
+
+#[test]
+fn a_log_in_gear_and_moving_says_what_the_pedal_or_the_rpm_did() {
+    let flat = || vec![3000.0; 40];
+    assert_eq!(
+        why(&drive(50, flat(), Some(2.0), 300.0, Some(149.0))),
+        "No pulls: the accelerator pedal peaked at 14.9%, under the 15% a pull needs."
+    );
+    assert_eq!(
+        why(&drive(50, flat(), Some(2.0), 300.0, Some(500.0))),
+        "No pulls: RPM never rose in gear with the accelerator pedal at 15% or more."
+    );
+    // RPM rises 20 a row from the 10th row to the 25th, then falls. The rule compares RPM three rows either side, so the
+    // stretch runs from the 7th row to the 23rd: 0.8 s, 3,000 to 3,280 rpm
+    let rise: Vec<f64> = (0..40)
+        .map(|i| match i {
+            0..=9 => 3000.0,
+            10..=25 => 3000.0 + 20.0 * (i - 9) as f64,
+            _ => 3320.0 - 40.0 * (i - 25) as f64,
+        })
+        .collect();
+    assert_eq!(
+        why(&drive(50, rise, Some(2.0), 300.0, Some(500.0))),
+        "No pulls: the longest stretch of rising RPM in one gear lasted 0.8 s and gained 280 rpm. A pull needs 1.2 s and 700 rpm."
+    );
+}
+
+#[test]
+fn a_stretch_just_short_of_the_time_a_pull_needs_is_not_written_as_that_time() {
+    // 20 ms a row: RPM rises 5 a row from the 20th row to the 77th, then falls. The stretch runs from the 17th row to the
+    // 76th: 1.18 s, which one decimal would write as 1.2 s, and 3,000 to 3,285 rpm
+    let rpm: Vec<f64> = (0..100)
+        .map(|i| match i {
+            0..=19 => 3000.0,
+            20..=77 => 3000.0 + 5.0 * (i - 19) as f64,
+            _ => 3290.0 - 5.0 * (i - 77) as f64,
+        })
+        .collect();
+    assert_eq!(
+        why(&drive(20, rpm, Some(2.0), 300.0, Some(500.0))),
+        "No pulls: the longest stretch of rising RPM in one gear lasted 1.18 s and gained 285 rpm. A pull needs 1.2 s and 700 rpm."
+    );
+}
+
+#[test]
+fn a_log_with_a_pull_has_no_reason() {
+    // RPM rises 25 a row for 2 s: 1,000 rpm in one gear
+    let rpm: Vec<f64> = (0..40).map(|i| 3000.0 + 25.0 * i as f64).collect();
+    let mut s = Session::memory();
+    s.load_text("t.csv", &drive(50, rpm, Some(2.0), 300.0, Some(500.0)))
+        .unwrap();
+    let overview = call(&mut s, "overview", json!({})).unwrap();
+    assert_eq!(overview["pulls"].as_array().unwrap().len(), 1);
+    assert_eq!(overview["noPulls"], json!([]));
 }

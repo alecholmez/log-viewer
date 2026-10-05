@@ -143,6 +143,13 @@ export interface Table {
   fcnt: number[][];
 }
 
+/** Why one log has no pull. */
+export interface NoPull {
+  logKey: string;
+  /** one line that starts "No pulls:" */
+  reason: string;
+}
+
 export interface Overview {
   pulls: PullDto[];
   coarse: Table;
@@ -151,6 +158,10 @@ export interface Overview {
   samples: number;
   hz: number | null;
   ethanol: number | null;
+  /** the sentence that says what a pull is, written from the core's rule */
+  pullRule: string;
+  /** why each log with no pull has none, in the library's order */
+  noPulls: NoPull[];
 }
 
 export interface DynoOut {

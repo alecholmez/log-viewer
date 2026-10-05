@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::chips::chips;
-use crate::dyno::{detect_pulls, dyno, Dyno, Pt, Pull, Vehicle};
+use crate::dyno::{detect_pulls, dyno, pull_rule, why_no_pull, Dyno, Pt, Pull, Vehicle};
 use crate::findings::{analyze_logs, check_pull, Finding};
 use crate::haltech::{parse_nsp_csv, to_eng, type_info, Col};
 use crate::log::Log;
@@ -57,6 +57,26 @@ pub struct Overview {
     pub samples: usize,
     pub hz: f64,
     pub ethanol: f64,
+}
+
+/// Why one log has no pull.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoPull {
+    pub log_key: String,
+    /// one line that starts `No pulls:`
+    pub reason: String,
+}
+
+/// What the `overview` command answers: the overview, the sentence that says what a pull is, and why each log with no
+/// pull has none. The golden snapshot reads `Overview` alone, so these two are tested in tests/log_list.rs.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OverviewReply {
+    #[serde(flatten)]
+    overview: Overview,
+    pull_rule: String,
+    no_pulls: Vec<NoPull>,
 }
 
 #[derive(Serialize)]
@@ -377,6 +397,19 @@ impl Session {
         }
     }
 
+    /// Why each log with no pull has none, in the library's order.
+    pub fn no_pulls(&self) -> Vec<NoPull> {
+        let has_pull = |l: &Log| self.pulls.iter().any(|p| p.log_key == l.key);
+        self.logs
+            .iter()
+            .filter(|l| !has_pull(l))
+            .map(|l| NoPull {
+                log_key: l.key.clone(),
+                reason: why_no_pull(l),
+            })
+            .collect()
+    }
+
     pub fn dyno(&self, veh: &Vehicle, runs: &[Option<String>]) -> DynoOut {
         let find = |key: &Option<String>| -> Option<(&Log, &Pull)> {
             let p = self.pulls.iter().find(|p| Some(&p.key) == key.as_ref())?;
@@ -458,7 +491,14 @@ impl Session {
                 let path = arg_str(&args, "path")?.to_string();
                 ok(self.scan_dir(Path::new(&path))?)
             }
-            "overview" => ok(serde_json::to_value(self.overview()).map_err(|e| e.to_string())?),
+            "overview" => {
+                let reply = OverviewReply {
+                    overview: self.overview(),
+                    pull_rule: pull_rule(),
+                    no_pulls: self.no_pulls(),
+                };
+                ok(serde_json::to_value(reply).map_err(|e| e.to_string())?)
+            }
             "dyno" => {
                 let a: DynoArgs =
                     serde_json::from_value(args).map_err(|e| format!("bad dyno arguments: {e}"))?;

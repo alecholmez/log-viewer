@@ -5,6 +5,7 @@ use std::sync::OnceLock;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
+use crate::fmt::{fx, n0, num};
 use crate::log::Log;
 use crate::stats::median;
 
@@ -33,11 +34,13 @@ const MIN_SPEED: f64 = 12.0;
 const MIN_DUR: f64 = 1.2;
 const MIN_GAIN: f64 = 700.0;
 
-pub fn detect_pulls(log: &Log) -> Vec<Pull> {
-    let (t, ch, n) = (&log.t, &log.ch, log.n);
-    let mut pulls = Vec::new();
+/// The stretches where the rule for a pull holds at every sample: the accelerator pedal at `MIN_PEDAL` or more, the car
+/// at `MIN_SPEED` or more, in one gear, RPM rising. Each ends at its highest RPM. As the first and last sample of each.
+fn stretches(log: &Log) -> Vec<(usize, usize)> {
+    let (ch, n) = (&log.ch, log.n);
+    let mut out = Vec::new();
     if n == 0 {
-        return pulls;
+        return out;
     }
     let ok = |i: usize| {
         ch.pedal[i] >= MIN_PEDAL
@@ -57,36 +60,117 @@ pub fn detect_pulls(log: &Log) -> Vec<Pull> {
                 while b > a && ch.rpm[b] < ch.rpm[b - 1] {
                     b -= 1;
                 }
-                let (dur, gain) = (t[b] - t[a], ch.rpm[b] - ch.rpm[a]);
-                if dur >= MIN_DUR && gain >= MIN_GAIN {
-                    let (mut pk, mut mp, mut tp) = (0.0f64, 0.0f64, 0.0f64);
-                    for j in a..=b {
-                        pk = pk.max(ch.pedal[j]);
-                        mp = mp.max(ch.map[j]);
-                        tp = tp.max(ch.tps[j]);
-                    }
-                    pulls.push(Pull {
-                        key: format!("{}@{}", log.key, crate::fmt::fx(t[a], 1)),
-                        log_key: log.key.clone(),
-                        i0: a,
-                        i1: b,
-                        gear: ch.gear[a],
-                        t0: t[a],
-                        t1: t[b],
-                        rpm0: ch.rpm[a],
-                        rpm1: ch.rpm[b],
-                        dur,
-                        gain,
-                        peak_pedal: pk,
-                        peak_tps: tp,
-                        peak_map: mp,
-                    });
-                }
+                out.push((a, b));
                 s = if i < n && ok(i) { Some(i) } else { None };
             }
         }
     }
+    out
+}
+
+/// A pull is a stretch that lasts `MIN_DUR` and gains `MIN_GAIN`.
+pub fn detect_pulls(log: &Log) -> Vec<Pull> {
+    let (t, ch) = (&log.t, &log.ch);
+    let mut pulls = Vec::new();
+    for (a, b) in stretches(log) {
+        let (dur, gain) = (t[b] - t[a], ch.rpm[b] - ch.rpm[a]);
+        if dur >= MIN_DUR && gain >= MIN_GAIN {
+            let (mut pk, mut mp, mut tp) = (0.0f64, 0.0f64, 0.0f64);
+            for j in a..=b {
+                pk = pk.max(ch.pedal[j]);
+                mp = mp.max(ch.map[j]);
+                tp = tp.max(ch.tps[j]);
+            }
+            pulls.push(Pull {
+                key: format!("{}@{}", log.key, fx(t[a], 1)),
+                log_key: log.key.clone(),
+                i0: a,
+                i1: b,
+                gear: ch.gear[a],
+                t0: t[a],
+                t1: t[b],
+                rpm0: ch.rpm[a],
+                rpm1: ch.rpm[b],
+                dur,
+                gain,
+                peak_pedal: pk,
+                peak_tps: tp,
+                peak_map: mp,
+            });
+        }
+    }
     pulls
+}
+
+/// What a pull is, in one sentence written from the constants `detect_pulls` uses.
+pub fn pull_rule() -> String {
+    format!(
+        "A pull is RPM rising in one gear, with the car moving and the accelerator pedal at {}% or more, for at least {} s and {} rpm.",
+        num(MIN_PEDAL),
+        num(MIN_DUR),
+        n0(MIN_GAIN)
+    )
+}
+
+/// Why a log has no pull, in the log's own numbers: the first reason that applies, written from the constants
+/// `detect_pulls` uses. For a log with no pull only. A log with no gear or no speed reading reads as never in gear or
+/// never moving.
+pub fn why_no_pull(log: &Log) -> String {
+    let (t, ch) = (&log.t, &log.ch);
+    let in_gear = ch.gear.iter().any(|&g| g >= 1.0);
+    let moved = ch.vss.iter().any(|&v| v >= MIN_SPEED);
+    // NaN when the log has no reading of the pedal at all
+    let pedal = ch.pedal.iter().copied().fold(f64::NAN, f64::max);
+    // "but I did press it"
+    let pressed = if pedal >= MIN_PEDAL {
+        format!(" The accelerator pedal reached {}%.", n0(pedal))
+    } else {
+        String::new()
+    };
+    if !in_gear && !moved {
+        return format!("No pulls: the car stayed out of gear and did not move.{pressed}");
+    }
+    if !in_gear {
+        return format!("No pulls: the car stayed out of gear.{pressed}");
+    }
+    if !moved {
+        return format!(
+            "No pulls: the car stayed under {} km/h.{pressed}",
+            num(MIN_SPEED)
+        );
+    }
+    if pedal < MIN_PEDAL {
+        return format!(
+            "No pulls: the accelerator pedal peaked at {}%, under the {}% a pull needs.",
+            fx(pedal, 1),
+            num(MIN_PEDAL)
+        );
+    }
+    // the longest stretch of two samples or more; the first of two as long
+    let mut longest: Option<(usize, usize)> = None;
+    for (a, b) in stretches(log) {
+        if b > a && longest.is_none_or(|(x, y)| t[b] - t[a] > t[y] - t[x]) {
+            longest = Some((a, b));
+        }
+    }
+    let Some((a, b)) = longest else {
+        return format!(
+            "No pulls: RPM never rose in gear with the accelerator pedal at {}% or more.",
+            num(MIN_PEDAL)
+        );
+    };
+    let dur = t[b] - t[a];
+    // a stretch just short of the time a pull needs is never written as that time: 1.17 s, not 1.2 s
+    let lasted = (1..=3)
+        .map(|d| fx(dur, d))
+        .find(|s| dur >= MIN_DUR || s.parse::<f64>().is_ok_and(|v| v < MIN_DUR))
+        .unwrap_or_else(|| fx(dur, 3));
+    format!(
+        "No pulls: the longest stretch of rising RPM in one gear lasted {lasted} s and gained {} rpm. A pull needs {} s and {} rpm.",
+        n0(ch.rpm[b] - ch.rpm[a]),
+        num(MIN_DUR),
+        n0(MIN_GAIN)
+    )
 }
 
 /// Vehicle as the UI sends it, in SI units.
