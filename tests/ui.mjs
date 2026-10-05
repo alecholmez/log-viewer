@@ -1652,11 +1652,32 @@ try {
     JSON.stringify(listAt900),
   );
   const listAt700 = await runAView(1400, 700);
-  // choosing a run later does not scroll the list again
+  // choosing a run later does not scroll the list again, and the focus the rebuild gives back does not scroll it.
+  // The last pull is chosen from the page's own code, which scrolls nothing; it is below the visible part of the box
+  // at scrollTop 0, so a scroll to it, or to the button that has focus, would show as a changed scrollTop.
   await page.evaluate(() => (document.querySelector('.rail').scrollTop = 0));
-  await page.locator('.pull', { hasText: '2nd gear · 2,157' }).locator('button.r0').click();
-  await settle(page);
-  const listAfterRun = await page.evaluate(() => document.querySelector('.rail').scrollTop);
+  const lastRun = await page.evaluate(() => {
+    const rail = document.querySelector('.rail');
+    const btn = [...document.querySelectorAll('#logs .pull button.r0')].pop();
+    if (!btn) return null;
+    const row = btn.closest('.pull').getBoundingClientRect();
+    const below = row.top >= Math.min(rail.getBoundingClientRect().bottom, innerHeight);
+    btn.focus({ preventScroll: true });
+    const fid = btn.dataset.fid;
+    btn.click();
+    return { below, fid, key: btn.closest('.pull').textContent.slice(0, 30) };
+  });
+  const lastChosen =
+    !!lastRun &&
+    (await until(page, fid => document.querySelector(`#logs [data-fid="${fid}"]`)?.getAttribute('aria-pressed') === 'true', lastRun.fid));
+  const listAfterRun = await page.evaluate(fid => {
+    const rail = document.querySelector('.rail');
+    return {
+      box: rail.scrollTop,
+      page: scrollY,
+      focus: document.activeElement?.dataset?.fid === fid,
+    };
+  }, lastRun?.fid);
   await page.close();
   check(
     'at 1400 × 700 the list scrolls its own box to run A, without animating, and the page does not move',
@@ -1665,8 +1686,14 @@ try {
   );
   check(
     'choosing a run does not scroll the list again',
-    listAt700.box > 0 && listAfterRun === 0,
-    JSON.stringify([listAt700.box, listAfterRun]),
+    listAt700.box > 0 &&
+      !!lastRun &&
+      lastRun.below &&
+      lastChosen &&
+      listAfterRun.focus &&
+      listAfterRun.box === 0 &&
+      listAfterRun.page === 0,
+    JSON.stringify([listAt700.box, lastRun, lastChosen, listAfterRun]),
   );
   // fitting the screen: with the default view and pull, the replay from the transport to the time axis fits the window,
   // with plots from 34 to 53 px; when it cannot, the page scrolls and the transport stays at the top of the window
