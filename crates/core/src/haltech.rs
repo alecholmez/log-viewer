@@ -46,6 +46,18 @@ pub fn to_eng(ty: &str) -> impl Fn(f64) -> f64 {
     move |v| if v.abs() >= BAD { f64::NAN } else { v * s + o }
 }
 
+/// NSP gives a state or a count no unit: its `Type` is `Raw` or `Gear`. `Ratio` also prints with no unit, but it is a
+/// measurement scaled to thousandths, not a state, so it is not here. Inferred from the sample logs.
+pub fn has_no_unit(ty: &str) -> bool {
+    matches!(ty, "Raw" | "Gear")
+}
+
+/// The logger's own channels, which describe the log rather than the car: in NSP their names start `Data Log `
+/// (Data Log Status, Data Log Memory State).
+pub fn is_logger_channel(name: &str) -> bool {
+    name.starts_with("Data Log ")
+}
+
 /// Channels the analysis uses, by NSP name.
 pub mod name {
     pub const RPM: &str = "RPM";

@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use crate::haltech::{name, to_eng, Col, RawLog};
+use crate::states::State;
 use crate::switches::Group;
 
 /// Key channels in engineering units. A channel the log does not have is all NaN.
@@ -58,6 +59,8 @@ pub struct Log {
     pub(crate) states: OnceLock<Vec<String>>,
     /// the on/off channels, grouped into signals, found on first use
     pub(crate) switches: OnceLock<Vec<Group>>,
+    /// the state channels for the replay's chips, found on first use. `states` above is the findings' own list.
+    pub(crate) chip_states: OnceLock<Vec<State>>,
 }
 
 fn scale(col: &Col, ty: &str, n: usize) -> Vec<f64> {
@@ -148,6 +151,7 @@ impl Log {
             index,
             states: OnceLock::new(),
             switches: OnceLock::new(),
+            chip_states: OnceLock::new(),
         })
     }
 
@@ -184,6 +188,70 @@ impl Log {
         } else {
             self.t[self.n - 1] - self.t[0]
         }
+    }
+}
+
+/// Logs built in library tests, as the parser would build them.
+#[cfg(test)]
+pub(crate) mod built {
+    use super::Log;
+    use crate::haltech::{Col, RawLog};
+
+    /// What NSP writes for "no reading".
+    pub(crate) const X: f64 = 2_147_483_647.0;
+
+    /// A channel's name, its NSP `Type`, the range its header declares as [min, max] in raw units, and its raw samples.
+    pub(crate) type Typed<'a> = (&'a str, &'a str, Option<[f64; 2]>, &'a [f64]);
+
+    /// A log with the given sample times in milliseconds: RPM and Vehicle Speed, which every log needs, then the given channels.
+    pub(crate) fn typed_at(t_ms: Vec<f64>, channels: &[Typed]) -> Log {
+        let mut names = vec!["RPM".to_string(), "Vehicle Speed".to_string()];
+        let mut types = vec!["Raw".to_string(), "Raw".to_string()];
+        let mut ranges = vec![None, None];
+        let mut cols = vec![Col::Const(3000.0), Col::Const(0.0)];
+        for &(name, ty, range, v) in channels {
+            assert_eq!(v.len(), t_ms.len(), "{name}");
+            names.push(name.to_string());
+            types.push(ty.to_string());
+            ranges.push(range);
+            // as the parser does: a channel that never changes is stored once
+            cols.push(if v.iter().all(|&x| x == v[0]) {
+                Col::Const(v[0])
+            } else {
+                Col::Series(v.to_vec())
+            });
+        }
+        Log::from_raw(RawLog {
+            name: "built.csv".into(),
+            start: "built".into(),
+            names,
+            types,
+            ranges,
+            t_ms,
+            cols,
+        })
+        .unwrap()
+    }
+
+    /// The same, with one sample a second from 0 s: the index of a sample is its time in seconds.
+    pub(crate) fn typed(channels: &[Typed]) -> Log {
+        let n = channels[0].3.len();
+        typed_at((0..n).map(|i| i as f64 * 1000.0).collect(), channels)
+    }
+
+    /// Channels of type Raw that declare no range, at the given sample times in milliseconds.
+    pub(crate) fn log_at(t_ms: Vec<f64>, channels: &[(&str, &[f64])]) -> Log {
+        let raw: Vec<Typed> = channels
+            .iter()
+            .map(|&(name, v)| (name, "Raw", None, v))
+            .collect();
+        typed_at(t_ms, &raw)
+    }
+
+    /// Channels of type Raw that declare no range, one sample a second from 0 s.
+    pub(crate) fn log(channels: &[(&str, &[f64])]) -> Log {
+        let n = channels[0].1.len();
+        log_at((0..n).map(|i| i as f64 * 1000.0).collect(), channels)
     }
 }
 

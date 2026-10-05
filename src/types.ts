@@ -175,7 +175,7 @@ export interface SwitchRow {
 
 export interface Switches {
   rows: SwitchRow[];
-  /** signals whose named channel changes inside the span and that were left out by the core's row limit (`MAX_ROWS` in `switches.rs`) */
+  /** signals whose named channel changes inside the span and that were left out by the core's limit (`MAX_SWITCHES` in `switches.rs`) */
   more: number;
 }
 

@@ -151,9 +151,9 @@ fn across_the_whole_1_45_pm_log_the_clutch_is_one_row() {
     );
 }
 
-/// Nine switches change across the whole 1:44 pm log: eight rows, and one left out.
+/// Nine switches change across the whole 1:44 pm log, fewer than the limit: all nine, in order of first change.
 #[test]
-fn a_whole_log_is_cut_at_eight_rows_and_says_how_many_are_left_out() {
+fn a_whole_log_shows_all_nine_of_its_switches() {
     let Some(mut s) = sample_session() else {
         return;
     };
@@ -170,9 +170,10 @@ fn a_whole_log_is_cut_at_eight_rows_and_says_how_many_are_left_out() {
             "Gear Upshift State",
             "Brake Pressure Front Switch State",
             "Predicted MAP Active",
+            "Stepper 1 Pin 2 Output State",
         ]
     );
-    assert_eq!(reply["more"], 1);
+    assert_eq!(reply["more"], 0);
 }
 
 /// The clutch channels part by one sample in this pull: grouped per span they were two rows.
