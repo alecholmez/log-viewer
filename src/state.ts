@@ -289,9 +289,26 @@ export const curTable = (): Table | null => (S.tables ? S.tables[S.tres] : null)
 
 // ---------- names ----------
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * A log's start as the core gives it, a local date and time with no zone ("2026-04-17T13:45:37"), as "Apr 17, 1:45 pm",
+ * with the year when it is not this year: "Apr 17, 2025, 1:45 pm". Read from the text, never through Date, so the zone
+ * the machine is set to cannot move it.
+ */
+export function startLabel(at: string): string {
+  const year = new Date().getFullYear();
+  const m = /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)/.exec(at);
+  if (!m) return at;
+  const h = +m[4];
+  return (
+    MONTHS[+m[2] - 1] + ' ' + +m[3] + (+m[1] === year ? '' : ', ' + m[1]) + ', ' + (h % 12 || 12) + ':' + m[5] + (h < 12 ? ' am' : ' pm')
+  );
+}
+
+/** A log's name when the person has not named it: its date and time, or its file name without the extension when the core could not read its start. */
 export function logDefault(log: Log): string {
-  const m = /_(\d\d)(\d\d)(am|pm)/i.exec(log.name);
-  return m ? +m[1] + ':' + m[2] + ' ' + m[3].toLowerCase() + ' log' : log.name.replace(/\.csv$/i, '');
+  return log.startedAt ? startLabel(log.startedAt) : log.name.replace(/\.csv$/i, '');
 }
 export const logName = (log: Log) => S.names.logs[log.key] || logDefault(log);
 export const pullDefault = (p: Pull) => (ORD[p.gear] || 'Gear ' + p.gear) + ' gear · ' + fmt(p.rpm0) + '–' + fmt(p.rpm1) + ' rpm';

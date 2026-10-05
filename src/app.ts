@@ -367,9 +367,10 @@ function renderLogs(): void {
     );
     acts.appendChild(
       linkBtn('Rename', () =>
-        startRename(ttl, S.names.logs[log.key], logDefault(log), v => {
+        // renaming starts from the log's name, or from its date and time; leaving that, or nothing, keeps no name
+        startRename(ttl, logName(log), logDefault(log), v => {
           if (v !== null) {
-            if (v) S.names.logs[log.key] = v;
+            if (v && v !== logDefault(log)) S.names.logs[log.key] = v;
             else delete S.names.logs[log.key];
             saveSettings();
           }
@@ -607,8 +608,7 @@ function findingNode(f: Finding): HTMLLIElement {
     acts.appendChild(b);
   };
   if (f.occurrences && f.occurrences.length > 1) {
-    for (const o of f.occurrences.slice(0, 8))
-      if (o.log) add(o.label + ', ' + logName(o.log).replace(/ log$/, '') + ' ' + o.at.toFixed(0) + ' s', o);
+    for (const o of f.occurrences.slice(0, 8)) if (o.log) add(o.label + ', ' + logName(o.log) + ' ' + o.at.toFixed(0) + ' s', o);
   } else if (f.table) add(f.table === 'fuel' ? 'Open fuel table' : 'Open ignition table');
   else if (f.log) add('Show in replay');
   if (acts.childElementCount) body.appendChild(acts);

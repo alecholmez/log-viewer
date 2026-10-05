@@ -141,7 +141,7 @@ try {
     await chip.first().click();
     return true;
   };
-  // the chips of the default pull and of the whole Back road log (the 1:45 pm log, renamed above), as the core orders them
+  // the chips of the default pull and of the whole Back road log (the 1:45 pm log, renamed below), as the core orders them
   const DEFAULT_CHIPS =
     'Decel Detected,Drive By Wire 1 Pin 1 Output State,Clutch State,Gear Upshift State,Stepper 1 Pin 2 Output State,Predicted MAP Active,' +
     'Drive By Wire Throttle Motor Direction,Engine State,Idle Control State,Ignition Active Table,Gear,Traction Control State,Manifold Pressure Filter Scale';
@@ -197,6 +197,24 @@ try {
   check('all logs imported', /^Added 8 logs, 10 new pulls\./.test(await text(page, 'status')), await text(page, 'status'));
   check('the start panel gives way to the charts', !(await page.isVisible('#start')) && (await page.isVisible('#replay-panel')));
   check('header line', (await text(page, 'sub')) === '8 logs · 10 pulls · E63 on the flex sensor', await text(page, 'sub'));
+  // a log is named by its date and time, from the core; the year is added when it is not this year
+  const logDay = 'Apr 17' + (new Date().getFullYear() === 2026 ? '' : ', 2026');
+  const logAt = time => logDay + ', ' + time;
+  /** Click one of a log's own buttons (Replay, Rename, Remove, Confirm), the log known by text in it. False when there is no such button. */
+  const logAction = async (title, label) => {
+    const b = page.locator('#logs .log', { hasText: title }).locator('.links button', { hasText: label });
+    if (!(await b.count())) return false;
+    await b.first().click();
+    return true;
+  };
+  const titleList = p =>
+    p.evaluate(() => [...document.querySelectorAll('#logs .log')].map(l => l.querySelector('.ttl').textContent).join(' | '));
+  check(
+    'each log is titled by its date and time, oldest first',
+    (await titleList(page)) ===
+      ['1:36 pm', '1:40 pm', '1:42 pm', '1:44 pm', '1:45 pm', '1:46 pm', '1:48 pm', '1:55 pm'].map(logAt).join(' | '),
+    await titleList(page),
+  );
 
   // the same file again is refused, not duplicated
   await page.setInputFiles('#file', [logs[0]]);
@@ -213,6 +231,23 @@ try {
     stats.replace(/\n/g, ' '),
   );
   check('smoothing starts at Medium', (await page.getAttribute('[data-smooth="med"]', 'aria-pressed')) === 'true');
+  const runLine = await page.evaluate(
+    () =>
+      [...document.querySelectorAll('#stats .who')].map(w => w.textContent).join(' | ') +
+      ' | ' +
+      document.getElementById('replay-what').textContent,
+  );
+  check(
+    'the run lines and the replay name the log by its date and time',
+    runLine ===
+      'Run A · 2nd gear · 2,551–5,959 rpm · ' +
+        logAt('1:45 pm') +
+        ' | Run B · 2nd gear · 2,689–5,662 rpm · ' +
+        logAt('1:45 pm') +
+        ' | 2nd gear · 2,551–5,959 rpm · ' +
+        logAt('1:45 pm'),
+    runLine,
+  );
   await shot(page, '02-loaded');
 
   // smoothing off is the curve as the core first computes it
@@ -362,6 +397,20 @@ try {
   );
   const lc = page.locator('.finding', { hasText: 'Launch control switches on at every stop' });
   check('launch control finding has steps', (await lc.locator('ol.steps li').count()) >= 2);
+  const occButtons = (await lc.locator('.acts button').allTextContents()).join(' | ');
+  check(
+    "a finding's occurrences name each log by its date and time",
+    occButtons ===
+      [
+        '593 rpm, ' + logAt('1:55 pm') + ' 50 s',
+        '688 rpm, ' + logAt('1:48 pm') + ' 28 s',
+        '711 rpm, ' + logAt('1:55 pm') + ' 62 s',
+        '754 rpm, ' + logAt('1:55 pm') + ' 57 s',
+        '802 rpm, ' + logAt('1:45 pm') + ' 23 s',
+        '811 rpm, ' + logAt('1:45 pm') + ' 16 s',
+      ].join(' | '),
+    occButtons,
+  );
   await lc.locator('.acts button').first().click();
   await settle(page);
   const fv = await page.evaluate(() => {
@@ -497,10 +546,22 @@ try {
   // leave the library as the checks below expect it: Warm-up loaded, no other view
   if ((await page.inputValue('#view-sel')) === 'constructor') await page.click('#view-del');
   await page.selectOption('#view-sel', 'Warm-up');
-  await page.locator('.log-head', { hasText: '1:45 pm log' }).locator('button', { hasText: 'Rename' }).click();
+  // renaming starts from the date and time; leaving it as it is keeps no name
+  await logAction(logAt('1:44 pm'), 'Rename');
+  const renameStart = await page.evaluate(() => document.querySelector('#logs input.rename')?.value ?? null);
+  await page.keyboard.press('Enter');
+  const keptName = await page.evaluate(
+    () => Object.keys(window.__logViewer.names.logs).filter(k => k.startsWith('PCLog_2026-04-17_0144pm')).length,
+  );
+  check(
+    'renaming starts from the date and time, and leaving it keeps no name',
+    renameStart === logAt('1:44 pm') && keptName === 0,
+    JSON.stringify([renameStart, keptName]),
+  );
+  await logAction(logAt('1:45 pm'), 'Rename');
   await page.keyboard.type('Back road');
   await page.keyboard.press('Enter');
-  check('log renamed', (await page.locator('.log-head', { hasText: 'Back road' }).count()) === 1);
+  check('log renamed', (await page.locator('#logs .log .ttl', { hasText: 'Back road' }).count()) === 1);
 
   // replay: playing moves the clock; by-RPM mode draws
   await page.locator('.pull', { hasText: '2,551–5,959' }).locator('button.r0').click();
@@ -519,7 +580,7 @@ try {
   // switch and state chips. Channels is closed for these checks: with it closed the replay fits the window at every span below
   if (await page.isVisible('#picker')) await page.click('#chan-btn');
   // the 1:42 pm log has no switch that changes, and one state that does
-  await page.locator('.log-head', { hasText: '1:42 pm log' }).locator('button', { hasText: 'Replay' }).click();
+  await logAction(logAt('1:42 pm'), 'Replay');
   await chipsShown(page, 1);
   const bare = await replay(page);
   check(
@@ -850,7 +911,7 @@ try {
   );
   check('the choice clears when the span on screen changes', (await chosen()) === null && narrow.pressed === '', String(await chosen()));
   // across the whole log the clutch channels part by a sample at a few changes; they are still one chip
-  await page.locator('.log-head', { hasText: 'Back road' }).locator('button', { hasText: 'Replay' }).click();
+  await logAction('Back road', 'Replay');
   await chipsShown(page, 16);
   const whole = await replay(page);
   check(
@@ -886,8 +947,8 @@ try {
     if (!held++) await new Promise(r => setTimeout(r, 800));
     await route.continue();
   });
-  await page.locator('.log-head', { hasText: '1:44 pm log' }).locator('button', { hasText: 'Replay' }).click();
-  await page.locator('.log-head', { hasText: '1:42 pm log' }).locator('button', { hasText: 'Replay' }).click();
+  await logAction(logAt('1:44 pm'), 'Replay');
+  await logAction(logAt('1:42 pm'), 'Replay');
   await page.waitForTimeout(1200);
   await page.unroute('**/api/chips');
   const late = await replay(page);
@@ -898,7 +959,7 @@ try {
   );
 
   // the checkbox in Channels turns the chips off without asking the core
-  await page.locator('.log-head', { hasText: 'Back road' }).locator('button', { hasText: 'Replay' }).click();
+  await logAction('Back road', 'Replay');
   await chipsShown(page, 16);
   if (!(await page.isVisible('#picker'))) await page.click('#chan-btn');
   const askedBefore = asked.length;
@@ -1043,9 +1104,9 @@ try {
   // watch folder (browser mode takes a typed path)
   const watch = join(tmp, 'incoming');
   mkdirSync(watch);
-  await page.locator('.log-head', { hasText: '1:36 pm log' }).locator('button', { hasText: 'Remove' }).click();
-  await page.locator('.log-head', { hasText: '1:36 pm log' }).locator('button', { hasText: 'Confirm' }).click();
-  await page.waitForFunction(() => /^Removed PCLog_2026-04-17_0136pm\.csv/.test(document.getElementById('status').textContent));
+  await logAction(logAt('1:36 pm'), 'Remove');
+  await logAction(logAt('1:36 pm'), 'Confirm');
+  await until(page, () => /^Removed PCLog_2026-04-17_0136pm\.csv/.test(document.getElementById('status').textContent));
   check('log removed', (await page.locator('#logs .log').count()) === 7);
   // the removed log is still in the folder: it must not come back. A duplicate and a non-log are passed over too.
   copyFileSync(logs[0], join(watch, 'PCLog_2026-04-17_0136pm.csv'));
@@ -1210,6 +1271,18 @@ try {
   await page.waitForTimeout(600); // the settings written now hold the default again, for the pages below
   await page.close();
 
+  // the date and time are read as the core wrote them: a machine in another zone and another year shows the same time, with the year
+  page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, timezoneId: 'Pacific/Kiritimati' });
+  await page.clock.setFixedTime(new Date('2027-03-01T12:00:00Z'));
+  await page.goto(url);
+  await libraryOpen(page);
+  const zoned = (await titleList(page)).split(' | ');
+  check(
+    'in another zone and another year a log reads its own time, with the year',
+    zoned.length === 8 && zoned[0] === 'Apr 17, 2026, 1:36 pm' && zoned.includes('Apr 17, 2026, 1:55 pm'),
+    zoned.join(' | '),
+  );
+  await page.close();
   // the oldest webviews the app is built for (iOS 15.0, macOS 11) have no Object.hasOwn: it came with Safari 15.4
   page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   const oldErrors = [];
