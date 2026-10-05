@@ -8,6 +8,7 @@ See README.md for layout, commands and log import paths.
 
 - `npm install` then `npm run app` — desktop app in dev mode (`tauri dev`). `./run-app.command` does the same and logs to `run-app.log`.
 - `npm run app:build` — installers for the current OS.
+- The Mac app is installed once, in `/Applications`. After `npm run app:build`, move the new bundle there in place of the old one (`ditto`, then delete the bundle under `src-tauri/target`) and open it from there, so the Mac has one Log Viewer.
 - `npm run test:core` — core against `crates/core/tests/golden.json` (snapshot from `testdata/logs`) plus library and switch-row tests.
 - `npm run build && cargo build --release -p logviewer-dev && npm run test:ui` — Playwright end-to-end test of the UI against the real core over HTTP.
 - `npm run core -- --dir .logviewer` + `npm run dev` — UI in a browser without the native shell.
@@ -49,6 +50,11 @@ See README.md for layout, commands and log import paths.
   Still to design: channels with a small set of states (gear, launch control state, active table). They need value labels the log does not carry, so they stay as traces.
 - App UI pass with `redesign-existing-projects`, 2026-10-04. Applied: hover, press and transition states on controls, sentence-case subheads, `text-wrap: pretty` on prose, a car icon on the Vehicle button (Phosphor, as on the website), the 3D table growing to fill its panel, and a refused duplicate naming the file once.
   Then, same day: unselected pulls lose their boxes and the text actions their underlines; an empty library shows one "Add your first log" panel in place of the charts (`.app.no-logs`, set in `renderLogs`); naming, saving and deleting a view moved into the Channels picker.
+- UI review with `ui-ux-pro-max`, 2026-10-04 (https://claude.ai/artifact/RNaXck6LX1briQPyayHxZ9): 23 findings, and an order the owner approved.
+  Step 1 is built, from `docs/superpowers/specs/2026-10-04-ui-review-fixes-design.md` by `docs/superpowers/plans/2026-10-04-ui-review-fixes.md`: colours that meet the contrast minimums, the message area at the bottom of the window, vehicle fields that refuse values outside their range, undo for a deleted view, findings that keep their column, a shorter header line, the `main` landmark and a skip link.
+  Still to do, in order: the replay's height with the chips, the log list, touch and text sizes, the phone and tablet structure (from a prototype), then keyboard movement in lists, marks on the power chart, run letters, export and the type scale.
+- Phone and tablet layout: owner call 2026-10-04, from three layouts compared on the real app on a phone (https://claude.ai/artifact/67kWMB87me2bYFQSkXzFXQ): layout A. In a window 860px wide or less, a bar at the bottom of the screen (Logs, Power, Tables, Findings, Replay) shows one section at a time and opens on Power. The owner's reason: "the section bar is the most ios native".
+  Not built. It is the phone and tablet structure in the order above, and comes after the replay chips, the log list and the touch and text sizes.
 - Design work uses the taste skills in `.claude/skills` (from github.com/Leonxlnx/taste-skill, MIT): `design-taste-frontend` for the landing page, `redesign-existing-projects` for the app UI. The first says of itself that it is not for dashboards or dense product UI, so it does not apply to the app.
 
 ## Rules for this project
@@ -62,6 +68,8 @@ See README.md for layout, commands and log import paths.
 - NSP unit scaling in `haltech.rs` was inferred from logs, not from Haltech documentation.
 - Other ECUs (Link next) go in a module beside `haltech.rs`; the dyno and tables use only the channel roles in `log.rs`.
 - Switch rows: what is a switch (samples of 0 and 1, and a declared `DisplayMaxMin` within 0 to 2), which channels are one signal (grouped once per log: same start, same changes each at most one sample apart, missing at the same samples), the spans, the order and the limit of eight are decided in `crates/core/src/switches.rs`. A row is built from the group's shortest name alone. `src/charts.ts` draws the spans the core returns and reads no samples for them. Their values are tested in `crates/core/tests/switches.rs`, not in the golden snapshot.
+- Messages to the person go through `src/messages.ts`: `say` for a result, `progress` for work under way, `fail` for a failure. Nothing else writes to `#status`.
+- Colours: no raw colour in a rule outside the token blocks of `src/styles.css`. Text on a colour uses the `--on-…` tokens; text is at least 4.5:1 and a line or mark at least 3:1.
 
 ## The test car (for sanity checks)
 

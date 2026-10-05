@@ -7,6 +7,7 @@
     <title>Log Viewer</title>
   </head>
   <body>
+<a class="skip" href="#main">Skip to the charts and findings</a>
 <div class="app no-logs">
   <header class="top">
     <div>
@@ -40,7 +41,7 @@
 
     </aside>
 
-    <div class="main">
+    <main class="main" id="main" tabindex="-1">
       <section class="panel full" id="start" aria-labelledby="h-start" hidden>
         <h2 id="h-start">Add your first log</h2>
         <p>Add Haltech NSP logs (.csv). Drop the files on this window or use Add logs.</p>
@@ -75,7 +76,7 @@
         </div>
         <div class="stats" id="stats"></div>
         <div class="legend" id="legend"></div>
-        <div class="cv-wrap" id="dyno-wrap"><canvas id="dyno-cv" role="img" aria-label="Estimated wheel power and torque against engine speed for the selected pulls"></canvas></div>
+        <div class="cv-wrap" id="dyno-wrap"><canvas id="dyno-cv" role="img" aria-label="Estimated wheel power and torque against engine speed for the selected pulls. The Table button shows the values."></canvas></div>
         <div class="tbl-wrap" id="dyno-tbl" hidden></div>
         <p class="note" id="dyno-note"></p>
       </section>
@@ -107,9 +108,9 @@
       <section class="panel full" aria-labelledby="h-find">
         <div class="panel-head"><h2 id="h-find">Findings</h2><span class="hint" id="find-sum"></span></div>
         <h3>All logs</h3>
-        <ul class="findings" id="find-all"></ul>
+        <div class="findings" id="find-all"></div>
         <h3 id="find-run-h">Run A</h3>
-        <ul class="findings" id="find-run"></ul>
+        <div class="findings" id="find-run"></div>
       </section>
 
       <section class="panel full" id="replay-panel" aria-labelledby="h-replay">
@@ -157,7 +158,7 @@
         <div class="cv-wrap" id="tr-wrap"><canvas id="tr-cv" role="img" aria-label="Logged channels around the selected span"></canvas></div>
         <p class="note" id="tr-note"></p>
       </section>
-    </div>
+    </main>
   </div>
 </div>
 <dialog id="veh-dlg" aria-labelledby="h-veh">

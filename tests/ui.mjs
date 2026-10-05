@@ -173,11 +173,7 @@ try {
   await settle(page);
   check('all logs imported', /^Added 8 logs, 10 new pulls\./.test(await text(page, 'status')), await text(page, 'status'));
   check('the start panel gives way to the charts', !(await page.isVisible('#start')) && (await page.isVisible('#replay-panel')));
-  check(
-    'header counts',
-    /8 logs · 509 channels · 7,469 samples at 21 Hz · 10 pulls · E63/.test(await text(page, 'sub')),
-    await text(page, 'sub'),
-  );
+  check('header line', (await text(page, 'sub')) === '8 logs · 10 pulls · E63 on the flex sensor', await text(page, 'sub'));
 
   // the same file again is refused, not duplicated
   await page.setInputFiles('#file', [logs[0]]);
@@ -305,6 +301,42 @@ try {
   const marks = [];
   for (const t of ['--run-a', '--run-b', '--run-c', '--warn-mark', '--crit']) marks.push(await tokenContrast(page, t));
   check('run colours and markers show on a panel', Math.min(...marks) >= 3, JSON.stringify(marks));
+  // findings keep their column when one opens or closes
+  await page.locator('#find-all .finding summary').first().scrollIntoViewIfNeeded();
+  const columns = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('#find-all .finding')]
+        .map(f => {
+          const c = f.closest('.fcol');
+          return (c ? [...c.parentElement.children].indexOf(c) : -1) + ':' + Math.round(f.getBoundingClientRect().left);
+        })
+        .join(),
+    );
+  const secondTop = () =>
+    page.evaluate(() => {
+      const f = document.querySelector('#find-all .fcol:nth-child(2) .finding');
+      return f ? Math.round(f.getBoundingClientRect().top + scrollY) : -1;
+    });
+  const colsBefore = await columns();
+  const topBefore = await secondTop();
+  await page.locator('#find-all .finding summary').first().click();
+  const colsAfter = await columns();
+  const topAfter = await secondTop();
+  await page.locator('#find-all .finding summary').first().click();
+  check(
+    'findings keep their column when one closes',
+    (await page.locator('#find-all .fcol').count()) === 2 && colsBefore === colsAfter && topBefore === topAfter && topBefore > 0,
+    JSON.stringify([colsBefore, colsAfter, topBefore, topAfter]),
+  );
+  const a11y = await page.evaluate(() => ({
+    mains: document.querySelectorAll('main').length,
+    chart: document.getElementById('dyno-cv').getAttribute('aria-label'),
+  }));
+  check(
+    'the work column is the main landmark, and the chart says where its values are',
+    a11y.mains === 1 && a11y.chart.endsWith('The Table button shows the values.'),
+    JSON.stringify(a11y),
+  );
   const lc = page.locator('.finding', { hasText: 'Launch control switches on at every stop' });
   check('launch control finding has steps', (await lc.locator('ol.steps li').count()) >= 2);
   await lc.locator('.acts button').first().click();
@@ -980,6 +1012,25 @@ try {
     JSON.stringify([early, openedAfterEarly]),
   );
   await page.close();
+  // Reduce Motion: Replay on a log scrolls to the replay without animation
+  for (const reducedMotion of ['reduce', 'no-preference']) {
+    page = await open({ reducedMotion });
+    await settle(page);
+    const behavior = await page.evaluate(() => {
+      let seen;
+      const real = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = function (o) {
+        seen = o && o.behavior;
+        return real.call(this, o);
+      };
+      document.querySelector('#logs .links button').click();
+      Element.prototype.scrollIntoView = real;
+      return seen;
+    });
+    const want = reducedMotion === 'reduce' ? 'auto' : 'smooth';
+    check('Replay scrolls with behavior ' + want + ' when Reduce Motion is ' + reducedMotion, behavior === want, String(behavior));
+    await page.close();
+  }
   // phone and tablet widths, dark mode: no sideways scroll, rail not sticky on a phone
   for (const [name, width, height] of [
     ['phone', 390, 844],
@@ -1029,6 +1080,26 @@ try {
       );
     }
     await shot(page, '07-' + name, true);
+    if (name === 'phone') {
+      const stacked = await page.evaluate(() => {
+        const cols = [...document.querySelectorAll('#find-all .fcol')].map(c => c.getBoundingClientRect());
+        return cols.length === 2 && Math.round(cols[0].left) === Math.round(cols[1].left) && cols[1].top >= cols[0].bottom;
+      });
+      check('on a phone the two columns of findings stack in order', stacked);
+    }
+    // the first Tab stop is the skip link, and it moves focus to the work column
+    await page.keyboard.press('Tab');
+    const skip = await page.evaluate(() => ({
+      text: document.activeElement.textContent,
+      shown: document.activeElement.getBoundingClientRect().top >= 0,
+    }));
+    if (skip.text === 'Skip to the charts and findings') await page.keyboard.press('Enter');
+    const landed = await page.evaluate(() => document.activeElement.tagName + '#' + document.activeElement.id);
+    check(
+      name + ': the first Tab stop skips to the charts and findings',
+      skip.text === 'Skip to the charts and findings' && skip.shown && landed === 'MAIN#main',
+      JSON.stringify([skip, landed]),
+    );
     await page.close();
   }
 

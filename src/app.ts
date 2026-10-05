@@ -62,7 +62,9 @@ import type { DynoOut, Finding, Log, Occurrence, Pull, Settings, Sev, Table, Tra
 
 const input = (id: string) => $<HTMLInputElement>(id);
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
-const scrollTo = (id: string) => $(id).scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+/** Bring a panel into view. The scroll is animated unless the system asks for reduced motion. */
+const scrollTo = (id: string) =>
+  $(id).scrollIntoView({ block: 'nearest', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 
 // ---------- settings ----------
 
@@ -219,12 +221,6 @@ async function reload(): Promise<void> {
   $('sub').textContent = logs.length
     ? logs.length +
       (logs.length === 1 ? ' log · ' : ' logs · ') +
-      logs[0].names.length +
-      ' channels · ' +
-      fmt(ov.samples) +
-      ' samples at ' +
-      fmt(ov.hz) +
-      ' Hz · ' +
       S.pulls.length +
       (S.pulls.length === 1 ? ' pull' : ' pulls') +
       (ov.ethanol !== null ? ' · E' + fmt(ov.ethanol) + ' on the flex sensor' : '')
@@ -632,15 +628,27 @@ function findingNode(f: Finding): HTMLLIElement {
   return li;
 }
 
+/**
+ * Fill a findings list as two columns, the first half by count in the first.
+ * Each column is its own list, so a finding stays in its column when another opens or closes.
+ */
+function fillFindings(box: HTMLElement, findings: Finding[], none: string): void {
+  box.textContent = '';
+  const column = (items: Finding[]) => {
+    const ul = el('ul', 'fcol');
+    for (const f of items) ul.appendChild(findingNode(f));
+    box.appendChild(ul);
+    return ul;
+  };
+  if (!findings.length) return void column([]).appendChild(el('li', 'hint', none));
+  const half = Math.ceil(findings.length / 2);
+  column(findings.slice(0, half));
+  if (findings.length > 1) column(findings.slice(half));
+}
+
 function renderFindings(): void {
-  const a = $('find-all');
-  const r = $('find-run');
-  a.textContent = '';
-  r.textContent = '';
-  if (!S.findings.length) a.appendChild(el('li', 'hint', 'Nothing flagged across these logs.'));
-  for (const f of S.findings) a.appendChild(findingNode(f));
-  if (!S.runFindings.length) r.appendChild(el('li', 'hint', 'Pick a pull as run A to check it.'));
-  for (const f of S.runFindings) r.appendChild(findingNode(f));
+  fillFindings($('find-all'), S.findings, 'Nothing flagged across these logs.');
+  fillFindings($('find-run'), S.runFindings, 'Pick a pull as run A to check it.');
   const all = S.findings.concat(S.runFindings);
   const n = (k: Sev) => all.filter(f => f.sev === k).length;
   $('find-sum').textContent = all.length
