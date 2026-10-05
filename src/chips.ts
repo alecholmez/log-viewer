@@ -105,6 +105,18 @@ export function chipShade(chip: Chip): [number, number][] {
   return chip.row.sections.filter((_, k) => k % 2 === 1).map(([a, b]): [number, number] => [a, b]);
 }
 
+/**
+ * The change to step to from t: the first after it (dir 1) or the last before it (dir -1), of the chosen chip, or of any
+ * chip shown when none is chosen. Null when there is none that way. Two chips that change at the same time are one stop.
+ */
+export function stepTarget(t: number, dir: 1 | -1): number | null {
+  const chosen = chosenChip();
+  let best: number | null = null;
+  for (const chip of chosen ? [chosen] : chipList(shownChips()))
+    for (const x of chip.row.changes) if (dir > 0 ? x > t && (best === null || x < best) : x < t && (best === null || x > best)) best = x;
+  return best;
+}
+
 /** Clicking a chip chooses it; clicking it again clears it. One chip is chosen at a time. */
 export function wireChips(redraw: () => void): void {
   $('chips').addEventListener('click', e => {

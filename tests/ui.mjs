@@ -792,6 +792,36 @@ try {
   });
   await page.click('[data-xmode="time"]');
   check('the choice clears when its chip is no longer shown', choiceAfter === null, String(choiceAfter));
+  // stepping: Previous change and Next change move the playhead to a change of the chosen chip, or of any chip shown
+  const stepTo = async id => {
+    if (!(await page.locator('#' + id).count())) return null;
+    await page.click('#' + id);
+    return page.evaluate(() => window.__logViewer.t);
+  };
+  const disabled = id => page.evaluate(id => !!document.getElementById(id)?.disabled, id);
+  const stepLabels = await page.evaluate(() => [...document.querySelectorAll('#step-prev,#step-next')].map(b => b.textContent).join());
+  await playhead(page, 30.5);
+  const anyChip = [await stepTo('step-next'), await stepTo('step-next')];
+  await playhead(page, 33);
+  anyChip.push(await stepTo('step-prev'));
+  check(
+    'with no chip chosen, the step buttons land on the changes of every chip, once where two change together',
+    stepLabels === 'Previous change,Next change' && JSON.stringify(anyChip) === '[30.581,30.626,32.961]',
+    JSON.stringify([stepLabels, anyChip]),
+  );
+  await clickChip(page, 'Clutch State');
+  await playhead(page, 33);
+  const clutchSteps = [await stepTo('step-next'), await stepTo('step-next'), await disabled('step-next'), await stepTo('step-prev')];
+  await page.click('#play');
+  await page.waitForTimeout(200);
+  const stepped = await stepTo('step-prev');
+  const playing = await page.evaluate(() => window.__logViewer.playing);
+  await clickChip(page, 'Clutch State');
+  check(
+    'with a chip chosen they land on its changes, stop at its last, and stop the replay',
+    JSON.stringify(clutchSteps) === '[34.96,35.777,true,34.96]' && stepped === 34.96 && playing === false,
+    JSON.stringify([clutchSteps, stepped, playing]),
+  );
   await clickChip(page, 'Stepper 1 Pin 2 Output State'); // still shown in the narrower span below
   // the chips follow the span on screen, whatever set it: narrow the span by hand and they are asked for again
   await page.evaluate(() => {

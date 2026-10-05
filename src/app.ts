@@ -2,7 +2,7 @@
 
 import { api, inTauri, isMobile, onLogsChanged, pickFolder } from './api';
 import { atRunRpm, draw3d, drawDyno, drawTraces, dropTraceCache, dynoHover, t3Hover, tableScale, trX, traceLayout } from './charts';
-import { updateChips, wireChips } from './chips';
+import { stepTarget, updateChips, wireChips } from './chips';
 import { atRpm, buildLog, chanMeta, clamp, fixTable, valAt } from './data';
 import { clearMessage, fail, progress, say, wireMessages } from './messages';
 import {
@@ -911,6 +911,8 @@ function syncTransport(): void {
   if (!f) return;
   input('scrub').value = String(Math.round(((S.t - f.w0) / (f.w1 - f.w0 || 1)) * 1000));
   $('clock').textContent = (S.t - f.w0).toFixed(2) + ' / ' + (f.w1 - f.w0).toFixed(2) + ' s';
+  $<HTMLButtonElement>('step-prev').disabled = stepTarget(S.t, -1) === null;
+  $<HTMLButtonElement>('step-next').disabled = stepTarget(S.t, 1) === null;
   const pb = $('play');
   const lbl = S.playing ? 'Pause' : 'Play';
   if (pb.textContent !== lbl) pb.textContent = lbl;
@@ -1076,6 +1078,15 @@ function syncChips(): void {
 /** Ask again for the chips of the span on screen, after a request for them failed. */
 function retryChips(): void {
   chipsAsked = '';
+  drawAll();
+}
+
+/** Move the playhead to the previous or next change of the chips, and stop playing. */
+function step(dir: 1 | -1): void {
+  const to = stepTarget(S.t, dir);
+  if (to === null) return;
+  S.t = to;
+  S.playing = false;
   drawAll();
 }
 
@@ -1344,6 +1355,8 @@ function wire(): void {
     drawAll();
   });
   wireChips(drawAll);
+  $('step-prev').addEventListener('click', () => step(-1));
+  $('step-next').addEventListener('click', () => step(1));
   $<HTMLSelectElement>('view-sel').addEventListener('change', e => loadView((e.target as HTMLSelectElement).value));
   $('view-back').addEventListener('click', () => {
     leaveFinding();
