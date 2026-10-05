@@ -76,7 +76,7 @@ let saveTimer = 0;
 
 function collectSettings(): Settings {
   const veh: Record<string, string> = {};
-  for (const k in VEH_IDS) veh[k] = input(VEH_IDS[k]).value;
+  for (const k in VEH_IDS) veh[k] = vehOk[k];
   return {
     veh,
     model: S.model,
@@ -111,9 +111,48 @@ function saveSettings(): void {
 
 // ---------- model ----------
 
+/** The last valid text of each vehicle field. The estimate and the saved settings use these, never a value outside a field's range. */
+const vehOk: Record<string, string> = {};
+
+/** Whether a field's text is a value the estimate can use. A number field carries its range in the page; the others take any text. */
+function fieldValid(inp: HTMLInputElement): boolean {
+  if (inp.type !== 'number') return true;
+  const v = parseFloat(inp.value);
+  return v === v && v >= +inp.min && v <= +inp.max;
+}
+
+const plain = (s: string) => Number(s).toLocaleString('en-US', { maximumFractionDigits: 3 });
+
+/**
+ * Take a field's text if it is valid; otherwise keep the last valid one in use.
+ * `tell` shows the line under a field that is not valid. It is false while the field is being typed in,
+ * so the line does not appear on the way to a valid number; a line already showing stays until the value is valid.
+ */
+function checkField(k: string, tell: boolean): void {
+  const inp = input(VEH_IDS[k]);
+  const hintId = inp.id + '-hint';
+  let hint = document.getElementById(hintId);
+  if (fieldValid(inp)) {
+    vehOk[k] = inp.value;
+    hint?.remove();
+    inp.removeAttribute('aria-invalid');
+    inp.removeAttribute('aria-describedby');
+    return;
+  }
+  if (!hint) {
+    if (!tell) return;
+    hint = el('p', 'field-hint');
+    hint.id = hintId;
+    inp.after(hint);
+    inp.setAttribute('aria-invalid', 'true');
+    inp.setAttribute('aria-describedby', hintId);
+  }
+  hint.textContent = 'Enter ' + plain(inp.min) + ' to ' + plain(inp.max) + '. Using ' + plain(vehOk[k]) + '.';
+}
+
 function readVeh(): Vehicle {
   const n = (k: string, d: number) => {
-    const v = parseFloat(input(VEH_IDS[k]).value);
+    const v = parseFloat(vehOk[k]);
     return v === v ? v : d;
   };
   const D = VEH_DEFAULT as Record<string, number>;
@@ -126,10 +165,10 @@ function readVeh(): Vehicle {
     mrot: n('rot', 0) * LB,
     window: n('win', D.win),
     smooth: SMOOTH_RPM[S.smooth],
-    tire: input('v-tire').value,
+    tire: vehOk.tire,
     fd: n('fd', NaN),
-    gears: input('v-gears')
-      .value.split(/[,\s]+/)
+    gears: vehOk.gears
+      .split(/[,\s]+/)
       .map(Number)
       .filter(x => x > 0),
     speedSrc: S.speedSrc,
@@ -486,7 +525,9 @@ function renderVehSum(): void {
       '.';
   else if (p) s += ' Enter tire size, final drive and gear ratios to check the ECU speed channel.';
   $('veh-sum').textContent = s;
-  $('veh-btn-txt').textContent = 'Vehicle · ' + fmt(v.mass / LB) + ' lb';
+  const bad = document.querySelectorAll('#veh-dlg [aria-invalid="true"]').length;
+  $('veh-btn-txt').textContent =
+    'Vehicle · ' + fmt(v.mass / LB) + ' lb' + (bad ? ' · check ' + bad + (bad === 1 ? ' field' : ' fields') : '');
 }
 
 const SEV: Record<Sev, [string, string]> = { good: ['✓', 'OK'], warn: ['!', 'Check'], crit: ['!', 'Risk'], info: ['i', 'Note'] };
@@ -1222,18 +1263,29 @@ function wire(): void {
   // vehicle dialog
   const modelSel = $<HTMLSelectElement>('v-model');
   for (const k of Object.keys(VEH_IDS)) {
-    input(VEH_IDS[k]).addEventListener('input', () => {
+    const inp = input(VEH_IDS[k]);
+    inp.addEventListener('input', () => {
       if ((MODEL_FIELDS as readonly string[]).includes(k)) {
         S.model = 'custom';
         modelSel.value = 'custom';
       }
+      checkField(k, false);
       void recompute();
+    });
+    // leaving a field that is not valid shows what it takes
+    inp.addEventListener('change', () => {
+      checkField(k, true);
+      renderVehSum();
     });
   }
   modelSel.addEventListener('change', () => {
     S.model = modelSel.value;
     const c = CATALOG.find(x => x.id === S.model);
-    if (c) for (const k of MODEL_FIELDS) input(VEH_IDS[k]).value = String(c[k]);
+    if (c)
+      for (const k of MODEL_FIELDS) {
+        input(VEH_IDS[k]).value = String(c[k]);
+        checkField(k, true);
+      }
     void recompute();
   });
   const dlg = $<HTMLDialogElement>('veh-dlg');
@@ -1567,7 +1619,12 @@ export async function boot(): Promise<void> {
     fail('Could not read saved settings: ' + errText(e));
   }
   const veh = { ...VEH_DEFAULT, ...(st.veh || {}) };
-  for (const k in VEH_IDS) input(VEH_IDS[k]).value = String(veh[k]);
+  for (const k in VEH_IDS) {
+    // a saved value that is out of range is shown with its line, and the default is used
+    vehOk[k] = String(VEH_DEFAULT[k]);
+    input(VEH_IDS[k]).value = String(veh[k]);
+    checkField(k, true);
+  }
   S.model = st.model || MODEL_DEFAULT;
   sel.value = S.model;
   if (sel.value !== S.model) sel.value = S.model = 'custom';

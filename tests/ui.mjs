@@ -234,6 +234,54 @@ try {
   );
   await shot(page, '03-vehicle');
   await page.fill('#v-driver', '140');
+  // a value outside a field's range is not used: the field says what it takes, and the estimate keeps the last valid value
+  await page.waitForFunction(() => document.getElementById('veh-btn-txt').textContent === 'Vehicle · 2,902 lb');
+  await settle(page);
+  const powerBefore = await page.locator('#stats').innerText();
+  const field = () =>
+    page.evaluate(() => {
+      const i = document.getElementById('v-driver');
+      return {
+        hint: document.getElementById('v-driver-hint')?.textContent ?? null,
+        invalid: i.getAttribute('aria-invalid'),
+        describedBy: i.getAttribute('aria-describedby'),
+        btn: document.getElementById('veh-btn-txt').textContent,
+        lb: Math.round(window.__logViewer.veh.mass / 0.45359237),
+      };
+    });
+  await page.fill('#v-driver', '2000');
+  await settle(page);
+  const typing = await field();
+  check('no line under a field while it is being typed in', typing.hint === null && typing.lb === 2902, JSON.stringify(typing));
+  await page.press('#v-driver', 'Tab');
+  await settle(page);
+  const left = await field();
+  check(
+    'an out-of-range value shows the range and is not used',
+    left.hint === 'Enter 0 to 1,500. Using 140.' &&
+      left.invalid === 'true' &&
+      left.describedBy === 'v-driver-hint' &&
+      left.btn === 'Vehicle · 2,902 lb · check 1 field' &&
+      left.lb === 2902 &&
+      (await page.locator('#stats').innerText()) === powerBefore,
+    JSON.stringify(left),
+  );
+  await page.fill('#v-driver', '');
+  await settle(page);
+  const emptied = await field();
+  check(
+    'an empty field keeps the line and the last valid value',
+    emptied.hint === 'Enter 0 to 1,500. Using 140.' && emptied.lb === 2902,
+    JSON.stringify(emptied),
+  );
+  await page.fill('#v-driver', '140');
+  await page.waitForFunction(() => document.getElementById('veh-btn-txt').textContent === 'Vehicle · 2,902 lb');
+  const fixed = await field();
+  check(
+    'a valid value clears the line',
+    fixed.hint === null && fixed.invalid === null && fixed.describedBy === null,
+    JSON.stringify(fixed),
+  );
   await page.click('#veh-close');
   await settle(page);
 
@@ -867,6 +915,33 @@ try {
       () => false,
     );
   check('a result clears itself after Dismiss from the keyboard', clearedAfterKeyboardDismiss);
+  await page.close();
+  // a saved value that is out of range, as from a hand-edited settings file: shown with its line, and the default is used
+  page = await open();
+  await page.waitForTimeout(600); // let the page's own settings write finish first
+  await page.evaluate(async () => {
+    const st = await (await fetch('/api/get_settings', { method: 'POST', body: '{}' })).json();
+    st.veh.curb = '80';
+    await fetch('/api/set_settings', { method: 'POST', body: JSON.stringify({ value: st }) });
+  });
+  await page.reload();
+  await libraryOpen(page);
+  await page.waitForFunction(() => /^Vehicle · /.test(document.getElementById('veh-btn-txt').textContent));
+  const atStart = await page.evaluate(() => ({
+    value: document.getElementById('v-curb').value,
+    hint: document.getElementById('v-curb-hint')?.textContent ?? null,
+    btn: document.getElementById('veh-btn-txt').textContent,
+    lb: Math.round(window.__logViewer.veh.mass / 0.45359237),
+  }));
+  check(
+    'a saved value out of range is shown with its line, and the default is used',
+    atStart.value === '80' &&
+      atStart.hint === 'Enter 800 to 9,000. Using 2,762.' &&
+      atStart.btn === 'Vehicle · 2,902 lb · check 1 field' &&
+      atStart.lb === 2902,
+    JSON.stringify(atStart),
+  );
+  await page.waitForTimeout(600); // the settings written now hold the default again, for the pages below
   await page.close();
 
   // the oldest webviews the app is built for (iOS 15.0, macOS 11) have no Object.hasOwn: it came with Safari 15.4
