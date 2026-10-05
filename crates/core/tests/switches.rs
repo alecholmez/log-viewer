@@ -2,18 +2,9 @@
 
 mod common;
 
-use common::{call, sample_session};
+use common::{call, default_pull, log_key, pull, sample_session, PULL_PAD};
 use logviewer_core::Session;
 use serde_json::{json, Value};
-
-fn log_key(s: &mut Session, file: &str) -> String {
-    let logs = call(s, "logs", json!({})).unwrap();
-    let log = logs.as_array().unwrap().iter().find(|l| l["name"] == file);
-    log.expect("sample log")["key"]
-        .as_str()
-        .unwrap()
-        .to_string()
-}
 
 fn rows(s: &mut Session, log: &str, t0: f64, t1: f64) -> Value {
     call(s, "switches", json!({ "log": log, "t0": t0, "t1": t1 })).unwrap()
@@ -22,45 +13,6 @@ fn rows(s: &mut Session, log: &str, t0: f64, t1: f64) -> Value {
 fn names(reply: &Value) -> Vec<&str> {
     let rows = reply["rows"].as_array().unwrap();
     rows.iter().map(|r| r["name"].as_str().unwrap()).collect()
-}
-
-/// Seconds shown either side of a pull. Copies the UI's rule for the span of a pull (`focusPull` in `src/state.ts`).
-const PULL_PAD: f64 = 1.5;
-
-/// A pull's log and the span the replay shows for it: the pull with `PULL_PAD` either side, kept inside the log,
-/// as the UI does.
-fn replay_span(s: &mut Session, pull: &Value) -> (String, f64, f64) {
-    let log = pull["logKey"].as_str().unwrap().to_string();
-    let logs = call(s, "logs", json!({})).unwrap();
-    let meta = logs.as_array().unwrap().iter().find(|l| l["key"] == log);
-    let duration = meta.unwrap()["duration"].as_f64().unwrap();
-    let (t0, t1) = (pull["t0"].as_f64().unwrap(), pull["t1"].as_f64().unwrap());
-    (log, (t0 - PULL_PAD).max(0.0), (t1 + PULL_PAD).min(duration))
-}
-
-/// The pull the app opens on: the one with the largest RPM gain.
-fn default_pull(s: &mut Session) -> (String, f64, f64) {
-    let overview = call(s, "overview", json!({})).unwrap();
-    let pulls = overview["pulls"].as_array().unwrap();
-    let gain = |p: &&Value| p["gain"].as_f64().unwrap();
-    let p = pulls
-        .iter()
-        .max_by(|a, b| gain(a).total_cmp(&gain(b)))
-        .unwrap()
-        .clone();
-    replay_span(s, &p)
-}
-
-/// The pull with the given key.
-fn pull(s: &mut Session, key: &str) -> (String, f64, f64) {
-    let overview = call(s, "overview", json!({})).unwrap();
-    let pulls = overview["pulls"].as_array().unwrap();
-    let p = pulls
-        .iter()
-        .find(|p| p["key"] == key)
-        .expect("sample pull")
-        .clone();
-    replay_span(s, &p)
 }
 
 #[test]

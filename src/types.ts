@@ -179,6 +179,32 @@ export interface Switches {
   more: number;
 }
 
+/**
+ * One state chip: a channel that holds one of a few whole-number readings (Gear, Engine State), shown because it changes
+ * inside the span. Times are log seconds, clipped to the span.
+ */
+export interface StateRow {
+  name: string;
+  /** [start, end, reading] from one change to the next; one that starts on the last sample of the span has no length */
+  sections: [number, number, number][];
+  /** [start, end] where the channel has no samples */
+  gaps: [number, number][];
+  /** when the channel changes */
+  changes: number[];
+}
+
+export interface States {
+  rows: StateRow[];
+  /** states that change inside the span and that were left out by the core's limit (`MAX_STATES` in `states.rs`) */
+  more: number;
+}
+
+/** The switches and the states that change in a span: what the replay's chips show. */
+export interface Chips {
+  switches: Switches;
+  states: States;
+}
+
 /** Vehicle in SI units, as the core wants it. */
 export interface Vehicle {
   mass: number;

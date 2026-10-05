@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use crate::chips::chips;
 use crate::dyno::{detect_pulls, dyno, Dyno, Pt, Pull, Vehicle};
 use crate::findings::{analyze_logs, check_pull, Finding};
 use crate::haltech::{parse_nsp_csv, to_eng, type_info, Col};
@@ -460,6 +461,12 @@ impl Session {
                 ok(serde_json::to_value(self.dyno(&a.vehicle, &a.runs))
                     .map_err(|e| e.to_string())?)
             }
+            "chips" => {
+                let log = self.log(arg_str(&args, "log")?)?;
+                let (t0, t1) = (arg_f64(&args, "t0")?, arg_f64(&args, "t1")?);
+                ok(serde_json::to_value(chips(log, t0, t1)).map_err(|e| e.to_string())?)
+            }
+            // the UI's switch rows still ask for this; it goes when they do
             "switches" => {
                 let log = self.log(arg_str(&args, "log")?)?;
                 let (t0, t1) = (arg_f64(&args, "t0")?, arg_f64(&args, "t1")?);

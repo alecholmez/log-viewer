@@ -4,7 +4,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { DynoOut, LogMeta, Overview, Settings, Switches, Vehicle } from './types';
+import type { Chips, DynoOut, LogMeta, Overview, Settings, Switches, Vehicle } from './types';
 
 export const inTauri = '__TAURI_INTERNALS__' in window;
 
@@ -45,6 +45,11 @@ export const api = {
    * A span with t0 after t1 answers no rows. An `on` span that starts on the last sample of the span has zero length.
    */
   switches: (log: string, t0: number, t1: number) => call<Switches>('switches', { log, t0, t1 }),
+  /**
+   * The switches and the states that change between t0 and t1 (seconds in the log), each in order of first change and
+   * each cut at the core's limit. A span with t0 after t1 answers none of either.
+   */
+  chips: (log: string, t0: number, t1: number) => call<Chips>('chips', { log, t0, t1 }),
   getSettings: () => call<Settings | null>('get_settings'),
   setSettings: (value: Settings) => call<null>('set_settings', { value }),
 };
