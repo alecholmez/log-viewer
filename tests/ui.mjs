@@ -1327,6 +1327,21 @@ try {
     roomOpen < roomClosed && roomClosedAgain === roomClosed,
     JSON.stringify([roomClosed, roomOpen, roomClosedAgain]),
   );
+  // a window that only gets shorter: no box above the traces changes size, so only the window's own resize refits
+  page = await open({ viewport: { width: 1440, height: 900 } });
+  await settle(page);
+  await page.selectOption('#view-sel', 'Default');
+  await chipsShown(page, 13);
+  const tallWindow = (await replay(page)).ph;
+  await page.setViewportSize({ width: 1440, height: 700 });
+  await settle(page);
+  const shortWindow = (await replay(page)).ph;
+  await page.close();
+  check(
+    'the plots follow the window when only its height changes',
+    tallWindow === at900.ph && shortWindow === at700.ph,
+    JSON.stringify([tallWindow, shortWindow]),
+  );
 
   // phone and tablet widths, dark mode: no sideways scroll, rail not sticky on a phone
   for (const [name, width, height] of [

@@ -263,6 +263,9 @@ export const dropTraceCache = () => {
   trCache = null;
 };
 
+/** Height of the traces canvas for n plots of height ph: each plot under its label row, then the band of ticks, the time axis and 4 px under it. */
+const trHeight = (n: number, ph: number): number => n * (TG.lab + ph + TG.gap) + TG.ticks + TG.axis + 4;
+
 /**
  * The plot height at which the replay, from the top of the transport to the time axis, fits the window: the tallest from
  * TG.phMin to TG.phMax. When it does not fit at TG.phMin either, TG.phMin, and the page scrolls.
@@ -276,8 +279,9 @@ function fitPh(n: number): number {
     parseFloat(getComputedStyle(transport).marginBottom) +
     $('tr-wrap').getBoundingClientRect().top -
     $('viewbar').getBoundingClientRect().top;
-  const room = window.innerHeight - above - TG.ticks - TG.axis - 4;
-  return clamp(Math.floor(room / n) - TG.lab - TG.gap, TG.phMin, TG.phMax);
+  // the tallest ph for which trHeight(n, ph) fits under what is above: trHeight grows by n for each pixel of ph
+  const room = window.innerHeight - above - trHeight(n, 0);
+  return clamp(Math.floor(room / n), TG.phMin, TG.phMax);
 }
 
 /** The plot height last fitted and the number of traces it was fitted for; null when the room may have changed. */
@@ -357,11 +361,12 @@ const panelY = (L: TraceLayout, p: Panel, v: number) => p.y0 + L.ph - ((clamp(v,
 export function drawTraces(): void {
   const wrap = $('tr-wrap');
   const n = curView().traces.length;
-  // the band of ticks is always there, so the canvas height depends on the window and what is above it, never on the chips' answer
+  // the band of ticks is always reserved, so the canvas height does not change with whether ticks are drawn.
+  // The plot height follows the room the window leaves under what is above the traces, the chips box included
   const shown = Math.max(1, n);
   if (!fitted || fitted.n !== shown) fitted = { n: shown, ph: fitPh(shown) };
   const ph = fitted.ph;
-  const hpx = shown * (TG.lab + ph + TG.gap) + TG.ticks + TG.axis + 4;
+  const hpx = trHeight(shown, ph);
   if (wrap.style.height !== hpx + 'px') wrap.style.height = hpx + 'px';
   const cv = $<HTMLCanvasElement>('tr-cv');
   const { ctx, w, h, dpr } = prep(cv);
