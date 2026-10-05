@@ -211,7 +211,7 @@ fn each_sample_log_with_no_pull_says_why_in_its_own_numbers() {
     );
 }
 
-/// One log of 2 s at 50 ms a row, or of `rpm.len()` rows at `ms`: RPM as given, and Gear, Vehicle Speed and the accelerator
+/// One log of `rpm.len()` rows at `ms`: RPM as given, and Gear, Vehicle Speed and the accelerator
 /// pedal each held at one raw value (Speed and Percentage in tenths). None leaves that channel out of the log.
 fn drive(ms: usize, rpm: Vec<f64>, gear: Option<f64>, speed: f64, pedal: Option<f64>) -> String {
     let n = rpm.len();
@@ -320,4 +320,59 @@ fn a_log_with_a_pull_has_no_reason() {
     let overview = call(&mut s, "overview", json!({})).unwrap();
     assert_eq!(overview["pulls"].as_array().unwrap().len(), 1);
     assert_eq!(overview["noPulls"], json!([]));
+}
+
+const NEVER_ROSE: &str =
+    "No pulls: RPM never rose in gear with the accelerator pedal at 15% or more.";
+
+#[test]
+fn a_stretch_of_one_sample_is_not_a_stretch_of_rising_rpm() {
+    // RPM is flat except one higher sample at the 21st row. The rule compares RPM three rows either side, so it holds at
+    // the 18th row alone (row 21 against row 15): a stretch of one sample, which has no length
+    let rpm: Vec<f64> = (0..40)
+        .map(|i| if i == 20 { 3100.0 } else { 3000.0 })
+        .collect();
+    assert_eq!(
+        why(&drive(50, rpm, Some(2.0), 300.0, Some(500.0))),
+        NEVER_ROSE
+    );
+}
+
+#[test]
+fn of_two_stretches_as_long_the_first_is_named() {
+    // 500 ms a row, a step a float holds exactly, so the two lengths are equal to the bit. RPM rises 20 a row over the
+    // 10th to 19th rows, to 3,200, and holds; it falls to 3,000 at the 31st row; it rises 40 a row over the 51st to 60th
+    // rows, to 3,400, and holds. The rule compares RPM three rows either side, so each stretch is 14 rows, 7 s: the
+    // first from the 8th row to the 22nd, gaining 200 rpm, the second from the 48th to the 62nd, gaining 400 rpm
+    let rpm: Vec<f64> = (0..100)
+        .map(|i| match i {
+            0..=9 => 3000.0,
+            10..=19 => 3000.0 + 20.0 * (i - 9) as f64,
+            20..=29 => 3200.0,
+            30..=49 => 3000.0,
+            50..=59 => 3000.0 + 40.0 * (i - 49) as f64,
+            _ => 3400.0,
+        })
+        .collect();
+    assert_eq!(
+        why(&drive(500, rpm, Some(2.0), 300.0, Some(500.0))),
+        "No pulls: the longest stretch of rising RPM in one gear lasted 7.0 s and gained 200 rpm. A pull needs 1.2 s and 700 rpm."
+    );
+}
+
+#[test]
+fn a_log_with_no_pedal_reading_is_not_told_its_pedal_stayed_low() {
+    // RPM rises 25 a row for 2 s; with no pedal or throttle channel the rule never holds, and a missing pedal is not a
+    // low one
+    let rise = || {
+        (0..40)
+            .map(|i| 3000.0 + 25.0 * i as f64)
+            .collect::<Vec<f64>>()
+    };
+    assert_eq!(why(&drive(50, rise(), Some(2.0), 300.0, None)), NEVER_ROSE);
+    // out of gear, there is nothing about the pedal after it
+    assert_eq!(
+        why(&drive(50, rise(), Some(0.0), 300.0, None)),
+        "No pulls: the car stayed out of gear."
+    );
 }

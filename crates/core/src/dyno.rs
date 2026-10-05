@@ -35,7 +35,8 @@ const MIN_DUR: f64 = 1.2;
 const MIN_GAIN: f64 = 700.0;
 
 /// The stretches where the rule for a pull holds at every sample: the accelerator pedal at `MIN_PEDAL` or more, the car
-/// at `MIN_SPEED` or more, in one gear, RPM rising. Each ends at its highest RPM. As the first and last sample of each.
+/// at `MIN_SPEED` or more, in one gear, RPM rising. Each is the first and last sample of a stretch; the last is the latest
+/// sample that is not lower than the one before it, so a stretch can end below its highest RPM.
 fn stretches(log: &Log) -> Vec<(usize, usize)> {
     let (ch, n) = (&log.ch, log.n);
     let mut out = Vec::new();
@@ -139,6 +140,7 @@ pub fn why_no_pull(log: &Log) -> String {
             num(MIN_SPEED)
         );
     }
+    // false for NaN: a log with no pedal reading does not take this branch
     if pedal < MIN_PEDAL {
         return format!(
             "No pulls: the accelerator pedal peaked at {}%, under the {}% a pull needs.",
