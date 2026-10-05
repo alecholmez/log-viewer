@@ -111,8 +111,11 @@ function saveSettings(): void {
 
 // ---------- model ----------
 
-/** The last valid text of each vehicle field. The estimate and the saved settings use these, never a value outside a field's range. */
-const vehOk: Record<string, string> = {};
+/**
+ * The last valid text of each vehicle field: the defaults until the saved settings arrive.
+ * The estimate and the saved settings use these, never a value outside a field's range.
+ */
+const vehOk: Record<string, string> = Object.fromEntries(Object.entries(VEH_DEFAULT).map(([k, v]) => [k, String(v)]));
 
 /** Whether a field's text is a value the estimate can use. A number field carries its range in the page; the others take any text. */
 function fieldValid(inp: HTMLInputElement): boolean {
@@ -1621,7 +1624,6 @@ export async function boot(): Promise<void> {
   const veh = { ...VEH_DEFAULT, ...(st.veh || {}) };
   for (const k in VEH_IDS) {
     // a saved value that is out of range is shown with its line, and the default is used
-    vehOk[k] = String(VEH_DEFAULT[k]);
     input(VEH_IDS[k]).value = String(veh[k]);
     checkField(k, true);
   }

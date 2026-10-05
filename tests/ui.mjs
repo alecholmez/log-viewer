@@ -954,6 +954,32 @@ try {
   await settle(page);
   check('the app starts where Object.hasOwn does not exist', oldOpened && oldErrors.length === 0, JSON.stringify([oldOpened, oldErrors]));
   await page.close();
+  // a control that recomputes, used before the saved settings arrive, must not throw: the vehicle's values are there from the start
+  page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  await page.addInitScript(() => {
+    window.__early = [];
+    addEventListener('unhandledrejection', e => window.__early.push(String(e.reason)));
+    addEventListener('error', e => window.__early.push(e.message));
+  });
+  let letSettingsThrough;
+  const settingsHeld = new Promise(r => (letSettingsThrough = r));
+  await page.route('**/api/get_settings', async route => {
+    await settingsHeld;
+    await route.continue();
+  });
+  await page.goto(url);
+  // a click made in the page: the control is wired before the settings are asked for
+  await page.evaluate(() => document.querySelector('[data-smooth="off"]').click());
+  await settle(page);
+  const early = await page.evaluate(() => window.__early);
+  letSettingsThrough();
+  const openedAfterEarly = await until(page, () => document.getElementById('sub').textContent !== 'Opening the library');
+  check(
+    'a control used before the settings arrive does not throw',
+    early.length === 0 && openedAfterEarly,
+    JSON.stringify([early, openedAfterEarly]),
+  );
+  await page.close();
   // phone and tablet widths, dark mode: no sideways scroll, rail not sticky on a phone
   for (const [name, width, height] of [
     ['phone', 390, 844],
