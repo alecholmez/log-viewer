@@ -52,10 +52,10 @@ try {
       scrub.value = '520';
       scrub.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    // the list of logs starts at the log the three pulls are from
+    // the list of logs starts at the log the three pulls are from, found by its file name
     await page.evaluate(() => {
-      const heads = [...document.querySelectorAll('.log-head')];
-      heads.find(h => h.textContent.includes('1:45 pm log')).scrollIntoView({ block: 'start' });
+      const logs = [...document.querySelectorAll('#logs .log')];
+      logs.find(l => l.querySelector('.file')?.textContent === 'PCLog_2026-04-17_0145pm.csv').scrollIntoView({ block: 'start' });
       window.scrollTo(0, 0);
     });
     await page.waitForTimeout(300);

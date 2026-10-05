@@ -116,6 +116,7 @@ Two families. **Lato** for headlines, panel titles and big figures. Black (900) 
 - **Chart of supported ECUs.** One list in columns. A supported entry is `ink`, bold, with a check; the rest are `muted`.
 - **Status tag.** 13px bold text in a `hairline-strong` outline with 6px corners, for "Coming soon" and "Next".
 - **Message.** One line fixed to the bottom of the app's window: `surface-card` with the tooltip's `hairline-strong` outline, and 12px corners. A result is `body` text and clears itself; a failure is `ink` text, stays until it is dismissed, and carries the action that fixes it. Never red, never a filled bar.
+- **Log list.** A log's title in bold `ink`, its length in `body` under it, and its file name in `muted` on its own line, cut with an ellipsis. A log with no pull is one line, the title and `No pulls` in `muted`, and the whole line opens it; open, it shows what any log shows. A pull's facts are two lines that never wrap, with Rename as a text action under A, B and C.
 - **Chip.** A switch or a state read at the replay's playhead: the name in `body` text and the reading in bold `ink` figures, on `surface-card` with a `hairline-strong` outline and 8px corners. A switch chip leads with a dot that is filled while it is on. A chosen chip is a `selected` chip, as a selected control is. The chosen channel is shaded behind the traces in a tint of `run-a`, never in the grey of the selected pull; never red. On a touch screen a chip grows with the other buttons.
 
 ## 5. Layout

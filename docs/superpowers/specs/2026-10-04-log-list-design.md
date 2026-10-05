@@ -1,6 +1,6 @@
 # Log list: date and time, file name, and why a log has no pull
 
-Status: layout chosen by the owner on 2026-10-04 from the motion and log list study (https://claude.ai/artifact/XAiKwuxnEFFRJRTLsV5DmZ): "By log". The owner's reason: people tune in bursts over a couple of hours, so a list of logs each carrying its own date and time fits better than a list grouped by day.
+Status: layout chosen by the owner on 2026-10-04 from the motion and log list study (https://claude.ai/artifact/XAiKwuxnEFFRJRTLsV5DmZ): "By log". The owner's reason: people tune in bursts over a couple of hours, so a list of logs each carrying its own date and time fits better than a list grouped by day. Built by `docs/superpowers/plans/2026-10-05-log-list.md`, which lists the decisions taken where this design is silent.
 
 Amended on 2026-10-05 with findings 15 and 19 of the UI review (https://claude.ai/artifact/RNaXck6LX1briQPyayHxZ9), which the owner approved as step 3 of its order: a log with no pull is one line until it is opened, the list opens on run A, and a pull's facts have a fixed layout. Those parts are marked "UI review" below. Where they differ from the first version of this design, they win.
 
