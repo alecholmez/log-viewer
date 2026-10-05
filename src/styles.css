@@ -276,8 +276,9 @@ body.dropping .app{outline:2px dashed var(--ink-2);outline-offset:6px;border-rad
 @media (max-width:860px){
   .layout{grid-template-columns:minmax(0,1fr)}
   .rail{position:static;max-height:none;overflow:visible}
-  /* one column: the list scrolls in its own box so the charts stay within reach */
-  .logs{max-height:44vh;max-height:44dvh;overflow-y:auto;overscroll-behavior:contain;padding-right:2px}
+  /* one column: the list scrolls in its own box so the charts stay within reach. The box has room all round for the focus ring of the
+     controls at its edges (4 px, and 8 px more on a toggle's touch height); the margin takes that room back, so nothing moves */
+  .logs{max-height:calc(44vh + 24px);max-height:calc(44dvh + 24px);overflow-y:auto;overscroll-behavior:contain;padding:12px 14px 12px 12px;margin:-2px -12px -12px}
 }
 @media (max-width:480px){ .top h1{font-size:26px} .stat .big{font-size:24px} #dyno-wrap{height:280px} #t3-wrap{flex-basis:280px;min-height:280px} .pk{grid-template-columns:minmax(0,1fr) 64px auto auto} }
 

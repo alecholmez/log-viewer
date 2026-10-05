@@ -620,6 +620,15 @@ try {
       (await text(page, 'replay-what')).endsWith(logAt('1:48 pm')),
     JSON.stringify(replayOpened) + ' ' + (await text(page, 'replay-what')),
   );
+  // the person can close it again while the replay shows it, and open it once more
+  if (await toggleOf(logAt('1:48 pm')).count()) await toggleOf(logAt('1:48 pm')).click();
+  const replayClosed = await logState(logAt('1:48 pm'));
+  check(
+    'a log the replay shows can be closed',
+    replayClosed?.expanded === 'false' && replayClosed.hidden && replayClosed.actions === '',
+    JSON.stringify(replayClosed),
+  );
+  if (await toggleOf(logAt('1:48 pm')).count()) await toggleOf(logAt('1:48 pm')).click();
   await page.click('#view-back');
 
   // fuel finding opens the fuel table as a grid
@@ -1759,6 +1768,58 @@ try {
       skip.text === 'Skip to the charts and findings' && skip.shown && landed === 'MAIN#main',
       JSON.stringify([skip, landed]),
     );
+    if (name === 'phone') {
+      // one column: the list scrolls in its own box, and that box must leave room for every control's focus ring (the
+      // outline's 2 px and its 2 px offset), with the touch screen's taller toggles; the logs with no pull are opened for it
+      const ring = 4;
+      const measureRings = () =>
+        page.evaluate(ring => {
+          const ctrls = [...document.querySelectorAll('#logs button, #logs input')].filter(e => e.offsetParent);
+          const clipper = e => {
+            for (let a = e.parentElement; a; a = a.parentElement) if (getComputedStyle(a).overflowY !== 'visible') return a;
+            return null;
+          };
+          const worst = { left: 0, right: 0, top: 0, bottom: 0 };
+          const note = (side, cut) => {
+            worst[side] = Math.max(worst[side], Math.round(cut));
+          };
+          const list = document.getElementById('logs');
+          list.scrollTop = 0;
+          ctrls.forEach((e, i) => {
+            const box = e.getBoundingClientRect();
+            const c = clipper(e);
+            if (!c) return;
+            const r = c.getBoundingClientRect();
+            const pad = { left: r.left + c.clientLeft, right: r.left + c.clientLeft + c.clientWidth, top: r.top + c.clientTop };
+            note('left', pad.left - (box.left - ring));
+            note('right', box.right + ring - pad.right);
+            if (i === 0) note('top', pad.top - (box.top - ring));
+          });
+          // the last control, with the list scrolled to its end
+          list.scrollTop = list.scrollHeight;
+          const lastBox = ctrls[ctrls.length - 1]?.getBoundingClientRect();
+          const lastClip = ctrls.length ? clipper(ctrls[ctrls.length - 1]) : null;
+          if (lastBox && lastClip) {
+            const r = lastClip.getBoundingClientRect();
+            note('bottom', lastBox.bottom + ring - (r.top + lastClip.clientTop + lastClip.clientHeight));
+          }
+          list.scrollTop = 0;
+          return { count: ctrls.length, worst };
+        }, ring);
+      const closedBefore = await page.evaluate(() =>
+        [...document.querySelectorAll('#logs .log-toggle')]
+          .filter(b => b.getAttribute('aria-expanded') === 'false')
+          .map(b => b.dataset.key),
+      );
+      for (const key of closedBefore) await page.locator('#logs .log-toggle[data-key="' + key + '"]').click();
+      const rings = await measureRings();
+      for (const key of closedBefore) await page.locator('#logs .log-toggle[data-key="' + key + '"]').click();
+      check(
+        name + ': every control in the list shows its whole focus ring inside the list box',
+        rings.count > 0 && rings.worst.left <= 0 && rings.worst.right <= 0 && rings.worst.top <= 0 && rings.worst.bottom <= 0,
+        JSON.stringify(rings),
+      );
+    }
     await page.close();
   }
 
