@@ -4,6 +4,9 @@
 mod common;
 
 use common::{call, default_pull, log_key, pull, sample_session};
+use logviewer_core::chips::chips as core_chips;
+use logviewer_core::haltech::parse_nsp_csv;
+use logviewer_core::log::Log;
 use logviewer_core::Session;
 use serde_json::{json, Value};
 
@@ -267,4 +270,30 @@ fn a_request_that_cannot_be_answered_says_why() {
         err(&mut s, json!({ "log": "gone", "t0": 0.0, "t1": 1.0 })),
         "That log is not loaded."
     );
+}
+
+/// The UI holds times as f32 and sends them as text. The end of a stretch that the core clips to the span must be the
+/// very number the UI sent, because the UI reads a chip at the end of the span by comparing the two. serde_json reads a
+/// 17-digit number back exactly only with its `float_roundtrip` feature, which crates/core/Cargo.toml turns on.
+#[test]
+fn a_switch_on_at_the_end_of_the_span_ends_on_the_end_that_was_sent() {
+    let text = "%DataLog%\n\
+        Channel : RPM\nType : EngineSpeed\nDisplayMaxMin : 20000,0\n\
+        Channel : Vehicle Speed\nType : Speed\nDisplayMaxMin : 4000,0\n\
+        Channel : Fan\nType : Raw\nDisplayMaxMin : 1,0\n\
+        12:00:00.000,3000,0,0\n\
+        12:00:00.005,3000,0,1\n\
+        12:00:00.013,3000,0,1\n";
+    let log = Log::from_raw(parse_nsp_csv(text, "end.csv").unwrap()).unwrap();
+    // the whole log's end as the UI holds it, and the request as the UI writes it
+    let sent = 0.013_f32 as f64;
+    let args: Value = serde_json::from_str(r#"{"t0":0,"t1":0.013000000268220901}"#).unwrap();
+    let t1 = args["t1"].as_f64().unwrap();
+    assert_eq!(
+        t1, sent,
+        "the end in the request is not read back as it was sent"
+    );
+    let reply = serde_json::to_value(core_chips(&log, 0.0, t1)).unwrap();
+    assert_eq!(reply["switches"]["rows"][0]["name"], "Fan");
+    assert_eq!(reply["switches"]["rows"][0]["on"], json!([[0.005, sent]]));
 }

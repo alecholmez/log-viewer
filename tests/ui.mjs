@@ -1343,6 +1343,45 @@ try {
     JSON.stringify([tallWindow, shortWindow]),
   );
 
+  // the end of a span goes to the core as text and comes back in the answer; it must be the same number to the bit, or a
+  // switch that is on at the end of the span reads Off there. Narrow the span to each millisecond of a stretch where a
+  // switch is on, put the playhead on the end and read the chip
+  page = await open();
+  await settle(page);
+  await page.selectOption('#view-sel', 'Default');
+  await chipsShown(page, 13);
+  const spanEnds = await page.evaluate(async () => {
+    const s = window.__logViewer;
+    const redraw = () => document.querySelector('[data-xmode="time"]').click();
+    // a switch that turns on inside the span and stays on for a quarter of a second or more
+    const long = o => o[0] > s.focus.w0 && o[1] - o[0] >= 0.25;
+    const row = s.chips.switches.rows.find(r => r.on.some(long));
+    if (!row) return { name: '', tested: 0, wrong: [] };
+    const [a, b] = row.on.find(long);
+    const wrong = [];
+    let tested = 0;
+    for (let ms = Math.ceil(a * 1000) + 1; ms < b * 1000 && tested < 150; ms++) {
+      const end = Math.fround(ms / 1000);
+      s.focus.w1 = end;
+      redraw();
+      const key = [s.focus.log.key, s.focus.w0, end].join('|');
+      for (let i = 0; i < 400 && s.chipsFor !== key; i++) await new Promise(r => setTimeout(r, 5));
+      s.t = end;
+      redraw();
+      const chip = [...document.querySelectorAll('#chips .chip')].find(c => c.dataset.chip === row.name);
+      const reads = chip ? chip.querySelector('.vl').textContent : 'no chip';
+      tested++;
+      if (reads !== 'On') wrong.push(end + ' ' + reads);
+    }
+    return { name: row.name, tested, wrong: wrong.slice(0, 5) };
+  });
+  await page.close();
+  check(
+    'a switch that is on at the end of the span reads On there, whatever millisecond the span ends on',
+    spanEnds.tested >= 100 && spanEnds.wrong.length === 0,
+    JSON.stringify(spanEnds),
+  );
+
   // phone and tablet widths, dark mode: no sideways scroll, rail not sticky on a phone
   for (const [name, width, height] of [
     ['phone', 390, 844],

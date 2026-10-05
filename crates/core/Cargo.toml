@@ -6,5 +6,6 @@ description = "ECU log parsing and analysis for Log Viewer"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# float_roundtrip: the UI sends a span's ends as text and compares them, to the bit, with the ends in the answer
+serde_json = { version = "1", features = ["float_roundtrip"] }
 regex = "1"
