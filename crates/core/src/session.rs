@@ -39,6 +39,8 @@ struct LogMeta {
     key: String,
     name: String,
     start: String,
+    /// the log's start as a local date and time with no zone, `2026-04-17T13:45:37`; null when the log does not say
+    started_at: Option<String>,
     n: usize,
     hz: f64,
     duration: f64,
@@ -180,8 +182,10 @@ impl Session {
             .ok_or_else(|| "That log is not loaded.".to_string())
     }
 
+    /// The library's order: by start, oldest first, then by file name; logs with no start last, by file name.
     fn refresh(&mut self) {
-        self.logs.sort_by(|a, b| a.name.cmp(&b.name));
+        let order = |l: &Log| (l.started_at.is_none(), l.started_at.clone(), l.name.clone());
+        self.logs.sort_by_cached_key(order);
         self.pulls = self.logs.iter().flat_map(detect_pulls).collect();
     }
 
@@ -331,6 +335,7 @@ impl Session {
             key: log.key.clone(),
             name: log.name.clone(),
             start: log.start.clone(),
+            started_at: log.started_at.clone(),
             n: log.n,
             hz: log.hz,
             duration: log.duration(),

@@ -59,11 +59,11 @@ fn import_remove_and_reopen() {
         .load_text("copy.csv", &a)
         .unwrap_err()
         .contains(&format!("already in the library as {a_name}")));
-    // a different log with a name already taken is kept beside the first
+    // a different log with a name already taken is kept beside the first; the library lists them by start
     s.load_text(&a_name, &b).unwrap();
     assert_eq!(
         names(&mut s),
-        vec![a_name.replace(".csv", " (2).csv"), a_name.clone()]
+        vec![a_name.clone(), a_name.replace(".csv", " (2).csv")]
     );
     // anything else is refused with the reason
     assert!(s
@@ -96,7 +96,7 @@ fn import_remove_and_reopen() {
     );
 
     // removing deletes the library copy
-    let key = call(&mut s, "logs", json!({})).unwrap()[1]["key"]
+    let key = call(&mut s, "logs", json!({})).unwrap()[0]["key"]
         .as_str()
         .unwrap()
         .to_string();

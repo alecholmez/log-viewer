@@ -38,6 +38,8 @@ pub struct Ch {
 pub struct Log {
     pub name: String,
     pub start: String,
+    /// the log's start as a local date and time with no zone, `2026-04-17T13:45:37`; None when the log does not say
+    pub started_at: Option<String>,
     /// identity of a log across sessions: file name plus the log's own start stamp
     pub key: String,
     pub n: usize,
@@ -138,6 +140,7 @@ impl Log {
             key: format!("{}|{}", raw.name, raw.start),
             name: raw.name,
             start: raw.start,
+            started_at: raw.started_at,
             n,
             t,
             hz,
@@ -224,6 +227,7 @@ pub(crate) mod built {
         Log::from_raw(RawLog {
             name: "built.csv".into(),
             start: "built".into(),
+            started_at: None,
             names,
             types,
             ranges,

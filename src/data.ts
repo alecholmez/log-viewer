@@ -25,6 +25,7 @@ export function buildLog(m: LogMeta, blob: ArrayBuffer): Log {
     key: m.key,
     name: m.name,
     start: m.start,
+    startedAt: m.startedAt,
     n: m.n,
     hz: m.hz,
     duration: m.duration,

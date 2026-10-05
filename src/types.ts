@@ -14,6 +14,8 @@ export interface LogMeta {
   key: string;
   name: string;
   start: string;
+  /** the log's start as a local date and time with no zone, "2026-04-17T13:45:37"; null when the log does not say */
+  startedAt: string | null;
   n: number;
   hz: number;
   duration: number;
@@ -37,6 +39,8 @@ export interface Log {
   key: string;
   name: string;
   start: string;
+  /** the log's start as a local date and time with no zone, "2026-04-17T13:45:37"; null when the log does not say */
+  startedAt: string | null;
   n: number;
   hz: number;
   duration: number;

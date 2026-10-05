@@ -117,6 +117,8 @@ pub enum Col {
 pub struct RawLog {
     pub name: String,
     pub start: String,
+    /// the log's start as a local date and time with no zone, `2026-04-17T13:45:37`; None when the log does not say
+    pub started_at: Option<String>,
     pub names: Vec<String>,
     pub types: Vec<String>,
     /// per channel, the header's `DisplayMaxMin` as [min, max] in raw units; None when the header gives none
@@ -159,6 +161,30 @@ fn cell(s: Option<&str>) -> f64 {
             }
         }
     }
+}
+
+/// The log's start as a local date and time with no zone, `2026-04-17T13:45:37`. The date is the first part of the
+/// `Log :` header line (`20260417`); the time of day is the first row's clock, which is 24-hour (`13:45:37.026`). The
+/// header's own time is 12-hour with no am or pm, so it is not used. None when the date is not eight digits that make a
+/// month and a day, or the clock is not a time of day.
+fn local_start(header: &str, first_row: &str) -> Option<String> {
+    let date = header.split_whitespace().next()?;
+    let clock = first_row.get(..8)?;
+    if date.len() != 8 || !date.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let num = |s: &str| s.parse::<u32>().ok();
+    let (month, day) = (num(&date[4..6])?, num(&date[6..8])?);
+    let (h, m, s) = (num(&clock[..2])?, num(&clock[3..5])?, num(&clock[6..8])?);
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) || h > 23 || m > 59 || s > 59 {
+        return None;
+    }
+    Some(format!(
+        "{}-{}-{}T{clock}",
+        &date[..4],
+        &date[4..6],
+        &date[6..8]
+    ))
 }
 
 /// `DisplayMaxMin : max,min` as [min, max]. None when it is not two numbers.
@@ -205,6 +231,7 @@ pub fn parse_nsp_csv(text: &str, name: &str) -> Result<RawLog, String> {
             _ => {}
         }
     }
+    let started_at = first_row.and_then(|row| local_start(&start, row));
     let rows: Vec<&str> = first_row
         .into_iter()
         .chain(lines)
@@ -244,6 +271,7 @@ pub fn parse_nsp_csv(text: &str, name: &str) -> Result<RawLog, String> {
     Ok(RawLog {
         name: name.to_string(),
         start,
+        started_at,
         names,
         types,
         ranges,
@@ -270,5 +298,32 @@ mod tests {
             raw.ranges,
             [Some([0.0, 20000.0]), None, Some([-4096.0, 4096.0]), None]
         );
+    }
+
+    #[test]
+    fn the_start_is_the_header_date_and_the_first_rows_clock() {
+        let row = "13:45:37.026,3000";
+        assert_eq!(
+            local_start("20260417 01:45:37", row).as_deref(),
+            Some("2026-04-17T13:45:37")
+        );
+        // the header's time is not needed
+        assert_eq!(
+            local_start("20260417", row).as_deref(),
+            Some("2026-04-17T13:45:37")
+        );
+        // a date that is not eight digits, or not a month and a day
+        for header in [
+            "",
+            "2026417 01:45:37",
+            "2026-04-17 01:45:37",
+            "20261317 01:45:37",
+            "20260400 01:45:37",
+        ] {
+            assert_eq!(local_start(header, row), None, "{header:?}");
+        }
+        // a clock that is not a time of day
+        assert_eq!(local_start("20260417", "24:00:00.000,3000"), None);
+        assert_eq!(local_start("20260417", "12:60:00.000,3000"), None);
     }
 }
