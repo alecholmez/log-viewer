@@ -1,6 +1,6 @@
 // Canvas drawing: the power chart, the replay traces and the 3D table.
 
-import { chipsNote } from './chips';
+import { chipList, chipShade, chipsNote, chosenChip, shownChips } from './chips';
 import { atRpm, clamp, curveAtTime, idxAt, quant, valAt } from './data';
 import { $, RUN, S, chInfo, css, curTable, curView, fmt, hideTip, mix, niceStep, prep, replaySpan, series, showTip, theme } from './state';
 import type { Cell, ChInfo, RGB, TipRow } from './state';
@@ -219,8 +219,13 @@ export function dynoHover(e: PointerEvent): void {
 
 // ---------- traces ----------
 
-/** Trace geometry: left gutter, right gutter for live values, label row, panel height, gap, the band of ticks above the time axis, time axis. */
-export const TG = { l: 46, r: 92, lab: 17, ph: 53, gap: 6, ticks: 12, axis: 22 };
+/**
+ * Trace geometry: left gutter, right gutter for live values, label row, panel height, gap, the band of ticks above the
+ * time axis, a tick and a chosen chip's tick, time axis.
+ */
+export const TG = { l: 46, r: 92, lab: 17, ph: 53, gap: 6, ticks: 12, tick: 4, tickChosen: 8, axis: 22 };
+/** How strongly the chosen chip's stretches are tinted with run A. */
+const SHADE_ALPHA = 0.12;
 
 interface Span {
   log: Log;
@@ -357,6 +362,9 @@ export function drawTraces(): void {
     off.height = cv.height;
     const c = off.getContext('2d')!;
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // the chosen chip, shaded behind every trace. By RPM has none: its stretches are positions in time
+    const chosen = L.rpmMode ? null : chosenChip();
+    const shade = chosen ? chipShade(chosen) : [];
     for (const p of L.panels) {
       const flag = S.fview && p.key ? (S.fview.sev === 'crit' ? th.crit : S.fview.sev === 'warn' ? th.warn : th.ink2) : null;
       if (!L.rpmMode && f.m0 === f.m0) {
@@ -364,6 +372,22 @@ export function drawTraces(): void {
         c.globalAlpha = flag ? 0.2 : 1;
         c.fillRect(L.X(f.m0), p.y0, Math.max(2, L.X(f.m1) - L.X(f.m0)), TG.ph);
         c.globalAlpha = 1;
+      }
+      if (chosen) {
+        // a tint of run A, so it cannot be taken for the grey of the selected pull, and a thin edge at each change
+        c.fillStyle = th.run[0];
+        c.globalAlpha = SHADE_ALPHA;
+        for (const [a, b] of shade) c.fillRect(L.X(a), p.y0, Math.max(1, L.X(b) - L.X(a)), TG.ph);
+        c.globalAlpha = 1;
+        c.strokeStyle = th.run[0];
+        c.lineWidth = 1;
+        c.beginPath();
+        for (const t of chosen.row.changes) {
+          const x = Math.round(L.X(t)) + 0.5;
+          c.moveTo(x, p.y0);
+          c.lineTo(x, p.y0 + TG.ph);
+        }
+        c.stroke();
       }
       c.lineWidth = 1;
       c.strokeStyle = th.grid;
@@ -451,6 +475,46 @@ export function drawTraces(): void {
         path(sp, series(sp.log, p.a, sp.r), th.run[sp.r || 0], false, 2);
       }
       c.restore();
+      if (chosen?.kind === 'state' && p === L.panels[0]) {
+        // each section's value at its start, where the section has room for it
+        c.font = '700 11px ' + th.body;
+        c.fillStyle = th.ink;
+        c.textAlign = 'left';
+        c.textBaseline = 'top';
+        for (const [a, b, v] of chosen.row.sections) {
+          const txt = fmt(v);
+          const x = L.X(a) + 3;
+          if (L.X(b) - x >= c.measureText(txt).width + 3) c.fillText(txt, x, p.y0 + 3);
+        }
+      }
+    }
+
+    // the time axis, and above it a tick at every change of every chip shown, the chosen chip's darker and taller.
+    // By RPM has no ticks: they are positions in time
+    c.strokeStyle = th.rule;
+    c.lineWidth = 1;
+    c.beginPath();
+    c.moveTo(TG.l, bottom + 0.5);
+    c.lineTo(TG.l + L.pw, bottom + 0.5);
+    c.stroke();
+    if (!L.rpmMode) {
+      const ticks = (times: number[], h: number, color: string) => {
+        c.strokeStyle = color;
+        c.beginPath();
+        for (const t of times) {
+          const x = Math.round(L.X(t)) + 0.5;
+          c.moveTo(x, bottom - h);
+          c.lineTo(x, bottom);
+        }
+        c.stroke();
+      };
+      const others = chipList(shownChips()).filter(chip => chip.row.name !== chosen?.row.name);
+      ticks(
+        others.flatMap(chip => chip.row.changes),
+        TG.tick,
+        th.ink3,
+      );
+      if (chosen) ticks(chosen.row.changes, TG.tickChosen, th.ink);
     }
 
     // x axis

@@ -279,6 +279,8 @@ export const S = {
   chipsFor: '',
   /** "Show switches and states that change" in the Channels picker */
   chipsShow: true,
+  /** the name of the chosen chip, whose stretches are shaded behind the traces; null when none is chosen */
+  chosen: null as string | null,
 };
 
 /** The view on screen: a finding's own channels while one is being shown, otherwise the user's working view. */

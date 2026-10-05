@@ -55,6 +55,8 @@ function renderChips(c: Chips | null, hold: boolean): void {
   for (const chip of chipList(c)) {
     const b = el('button', 'chip');
     b.type = 'button';
+    b.dataset.chip = chip.row.name;
+    b.setAttribute('aria-pressed', 'false');
     if (chip.kind === 'switch') {
       b.appendChild(el('span', 'dot')).setAttribute('aria-hidden', 'true');
       if (chip.row.also.length) b.title = 'Also logged as ' + chip.row.also.join(', ');
@@ -71,7 +73,14 @@ function renderChips(c: Chips | null, hold: boolean): void {
 export function updateChips(): void {
   const c = shownChips();
   const hold = !c && chipsWanted();
-  if (c !== built || hold !== held) renderChips(c, hold);
+  if (c !== built || hold !== held) {
+    renderChips(c, hold);
+    // the choice goes with its chip
+    if (S.chosen !== null && !chipList(c).some(chip => chip.row.name === S.chosen)) {
+      S.chosen = null;
+      S.rev++;
+    }
+  }
   const f = S.focus;
   if (!f) return;
   const spanEnd = replaySpan(f)[1];
@@ -79,7 +88,32 @@ export function updateChips(): void {
     const txt = chipText(s.chip, S.t, spanEnd);
     if (s.vl.textContent !== txt) s.vl.textContent = txt;
     if (s.chip.kind === 'switch') s.box.classList.toggle('on', txt === 'On');
+    const pressed = String(s.chip.row.name === S.chosen);
+    if (s.box.getAttribute('aria-pressed') !== pressed) s.box.setAttribute('aria-pressed', pressed);
   }
+}
+
+/** The chosen chip, when it is shown. */
+export function chosenChip(): Chip | null {
+  if (S.chosen === null) return null;
+  return chipList(shownChips()).find(chip => chip.row.name === S.chosen) ?? null;
+}
+
+/** The stretches of a chosen chip to shade, in log seconds: where a switch is on, and every other section of a state. */
+export function chipShade(chip: Chip): [number, number][] {
+  if (chip.kind === 'switch') return chip.row.on;
+  return chip.row.sections.filter((_, k) => k % 2 === 1).map(([a, b]): [number, number] => [a, b]);
+}
+
+/** Clicking a chip chooses it; clicking it again clears it. One chip is chosen at a time. */
+export function wireChips(redraw: () => void): void {
+  $('chips').addEventListener('click', e => {
+    const name = (e.target as HTMLElement).closest<HTMLElement>('.chip')?.dataset.chip;
+    if (name === undefined) return;
+    S.chosen = S.chosen === name ? null : name;
+    S.rev++;
+    redraw();
+  });
 }
 
 /** What the note under the traces says about chips left out by the core's limits. */

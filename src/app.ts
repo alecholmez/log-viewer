@@ -2,7 +2,7 @@
 
 import { api, inTauri, isMobile, onLogsChanged, pickFolder } from './api';
 import { atRunRpm, draw3d, drawDyno, drawTraces, dropTraceCache, dynoHover, t3Hover, tableScale, trX, traceLayout } from './charts';
-import { updateChips } from './chips';
+import { updateChips, wireChips } from './chips';
 import { atRpm, buildLog, chanMeta, clamp, fixTable, valAt } from './data';
 import { clearMessage, fail, progress, say, wireMessages } from './messages';
 import {
@@ -1049,6 +1049,8 @@ function syncChips(): void {
   // chips for another span must not be shown for this one while the new chips are on their way
   S.chips = null;
   S.chipsFor = '';
+  // a choice is for one span
+  S.chosen = null;
   S.rev++;
   if (!f || !key) {
     // the setting is off or there is no log: an earlier failure no longer holds
@@ -1341,6 +1343,7 @@ function wire(): void {
     saveSettings();
     drawAll();
   });
+  wireChips(drawAll);
   $<HTMLSelectElement>('view-sel').addEventListener('change', e => loadView((e.target as HTMLSelectElement).value));
   $('view-back').addEventListener('click', () => {
     leaveFinding();

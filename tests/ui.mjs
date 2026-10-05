@@ -665,6 +665,134 @@ try {
     byRpm.names === DEFAULT_CHIPS && byRpm.now === pull.now && byRpm.height === bare.height && asked.length === 2,
     JSON.stringify([byRpm.now, pull.now, byRpm.height, asked.length]),
   );
+  /** How many pixels of one row of the plot area differ from the panel behind the canvas. */
+  const marked = (page, y, r) =>
+    page.evaluate(
+      ([y, l, pw]) => {
+        const d = document.getElementById('tr-cv').getContext('2d').getImageData(l, y, pw, 1).data;
+        const s = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim().slice(1);
+        const bg = [0, 2, 4].map(i => parseInt(s.slice(i, i + 2), 16));
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          // the canvas is clear where nothing is drawn and the panel behind it is --surface: take each pixel as it looks over the panel
+          const a = d[i + 3] / 255;
+          const off = k => Math.abs(d[i + k] * a + bg[k] * (1 - a) - bg[k]);
+          if (off(0) + off(1) + off(2) > 6) n++;
+        }
+        return n;
+      },
+      [Math.round(y), TG.l, Math.round(r.pw)],
+    );
+  // choosing a chip: it is shaded behind every trace in a tint of run A with an edge at each change, and its ticks are darker and taller
+  const [ink, ink3, runA] = [await token(page, '--ink'), await token(page, '--ink-3'), await token(page, '--run-a')];
+  const tinted = p => p[2] - p[0] >= 10; // blue over red: run A's tint, not the grey of the selected pull
+  const chosen = () => page.evaluate(() => window.__logViewer.chosen);
+  await playhead(page, 36.2); // clear of every pixel read below
+  const choseClutch = await clickChip(page, 'Clutch State');
+  pull = await replay(page);
+  const top0 = plotTop(pull, 0) + 2; // in the first plot, under its top line and above anything written in it
+  const ax = axisY(pull);
+  const clutchMarks = {
+    pressed: pull.pressed,
+    chosen: await chosen(),
+    on: tinted(await pixel(page, xAt(pull, 30.5), top0)),
+    off: tinted(await pixel(page, xAt(pull, 33), top0)),
+    edge: sameColour(await pixel(page, xAt(pull, 29.963), top0), runA),
+    tall: sameColour(await pixel(page, xAt(pull, 31.206), ax - 6), ink),
+    short: sameColour(await pixel(page, xAt(pull, 31.251), ax - 6), ink),
+    tick: sameColour(await pixel(page, xAt(pull, 31.251), ax - 2), ink3),
+    ink: (await textContrast(page, '#chips .chip[aria-pressed="true"]'))[0] >= 4.5,
+  };
+  check(
+    'choosing a switch chip shades where it is on, edges its changes and makes its ticks darker and taller',
+    choseClutch &&
+      clutchMarks.pressed === 'Clutch State' &&
+      clutchMarks.chosen === 'Clutch State' &&
+      clutchMarks.on &&
+      !clutchMarks.off &&
+      clutchMarks.edge &&
+      clutchMarks.tall &&
+      !clutchMarks.short &&
+      clutchMarks.tick &&
+      clutchMarks.ink,
+    JSON.stringify(clutchMarks),
+  );
+  // the choice survives scrubbing and playing
+  const cv = await page.locator('#tr-cv').boundingBox();
+  await page.mouse.click(cv.x + xAt(pull, 34), cv.y + top0 + 10);
+  await page.click('#play');
+  await page.waitForTimeout(200);
+  await page.click('#play');
+  check('the choice survives scrubbing and playing', (await chosen()) === 'Clutch State', String(await chosen()));
+  // a state chip: every other section is shaded, and each section's value is written at its start in the first trace
+  // text drawn on canvases that are not in the page: the traces' cached layer, not the power chart or the table
+  await page.evaluate(() => {
+    window.__texts = [];
+    window.__fillText = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (t, x, y, ...rest) {
+      if (!this.canvas.isConnected) window.__texts.push([String(t), Math.round(x), Math.round(y)]);
+      return window.__fillText.call(this, t, x, y, ...rest);
+    };
+  });
+  await clickChip(page, 'Gear');
+  pull = await replay(page);
+  const labels = await page.evaluate(
+    y => [...new Set(window.__texts.filter(([, , ty]) => ty === y).map(([t]) => t))].join(),
+    plotTop(pull, 0) + 3,
+  );
+  await page.evaluate(() => (CanvasRenderingContext2D.prototype.fillText = window.__fillText));
+  const gearMarks = {
+    pressed: pull.pressed,
+    labels,
+    second: tinted(await pixel(page, xAt(pull, 33), top0)),
+    first: tinted(await pixel(page, xAt(pull, 30.5), top0)),
+  };
+  check(
+    'choosing a state chip, one at a time, shades every other section and writes each value at its start',
+    gearMarks.pressed === 'Gear' && gearMarks.labels === '1,2,3' && gearMarks.second && !gearMarks.first,
+    JSON.stringify(gearMarks),
+  );
+  await clickChip(page, 'Gear');
+  pull = await replay(page);
+  const unchosen = {
+    pressed: pull.pressed,
+    chosen: await chosen(),
+    shade: tinted(await pixel(page, xAt(pull, 33), top0)),
+    tall: sameColour(await pixel(page, xAt(pull, 31.251), ax - 6), ink),
+  };
+  check(
+    'choosing it again clears the shading and the dark ticks',
+    unchosen.pressed === '' && unchosen.chosen === null && !unchosen.shade && !unchosen.tall,
+    JSON.stringify(unchosen),
+  );
+  // By RPM: no ticks and no shading, and the choice is kept for By time
+  await clickChip(page, 'Clutch State');
+  await page.click('[data-xmode="rpm"]');
+  const rpmMarks = { band: await marked(page, ax - 2, pull), plot: await marked(page, top0, pull), chosen: await chosen() };
+  await page.click('[data-xmode="time"]');
+  const timeBand = await marked(page, ax - 2, pull);
+  check(
+    'By RPM draws no ticks and no shading, and keeps the choice',
+    rpmMarks.band <= 3 && rpmMarks.plot <= 3 && rpmMarks.chosen === 'Clutch State' && timeBand > 15,
+    JSON.stringify([rpmMarks, timeBand]),
+  );
+  // the choice clears when its chip is no longer shown
+  await page.evaluate(() => {
+    const s = window.__logViewer;
+    window.__answer = s.chips;
+    s.chips = { ...s.chips, switches: { ...s.chips.switches, rows: s.chips.switches.rows.filter(r => r.name !== 'Clutch State') } };
+    s.rev++;
+  });
+  await page.click('[data-xmode="time"]');
+  const choiceAfter = await chosen();
+  await page.evaluate(() => {
+    const s = window.__logViewer;
+    s.chips = window.__answer;
+    s.rev++;
+  });
+  await page.click('[data-xmode="time"]');
+  check('the choice clears when its chip is no longer shown', choiceAfter === null, String(choiceAfter));
+  await clickChip(page, 'Stepper 1 Pin 2 Output State'); // still shown in the narrower span below
   // the chips follow the span on screen, whatever set it: narrow the span by hand and they are asked for again
   await page.evaluate(() => {
     const s = window.__logViewer;
@@ -684,6 +812,7 @@ try {
       !/ more /.test(narrow.note),
     JSON.stringify([asked.length, asked[2], narrow.names]),
   );
+  check('the choice clears when the span on screen changes', (await chosen()) === null && narrow.pressed === '', String(await chosen()));
   // across the whole log the clutch channels part by a sample at a few changes; they are still one chip
   await page.locator('.log-head', { hasText: 'Back road' }).locator('button', { hasText: 'Replay' }).click();
   await chipsShown(page, 16);
