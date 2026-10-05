@@ -869,6 +869,16 @@ try {
   check('a result clears itself after Dismiss from the keyboard', clearedAfterKeyboardDismiss);
   await page.close();
 
+  // the oldest webviews the app is built for (iOS 15.0, macOS 11) have no Object.hasOwn: it came with Safari 15.4
+  page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  const oldErrors = [];
+  page.on('pageerror', e => oldErrors.push(e.message));
+  await page.addInitScript(() => delete Object.hasOwn);
+  await page.goto(url);
+  const oldOpened = await until(page, () => document.getElementById('sub').textContent !== 'Opening the library');
+  await settle(page);
+  check('the app starts where Object.hasOwn does not exist', oldOpened && oldErrors.length === 0, JSON.stringify([oldOpened, oldErrors]));
+  await page.close();
   // phone and tablet widths, dark mode: no sideways scroll, rail not sticky on a phone
   for (const [name, width, height] of [
     ['phone', 390, 844],

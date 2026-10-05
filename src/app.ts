@@ -793,8 +793,11 @@ function updatePicker(now: number): void {
 
 const FINDING_OPTION = '\u0000finding';
 
-/** Whether a view is saved under this name. Its own key only: "constructor" and "toString" are on every object and are not saved views. */
-const isSavedView = (nm: string): boolean => Object.hasOwn(S.views, nm);
+/**
+ * Whether a view is saved under this name. Its own key only: "constructor" and "toString" are on every object and are not saved views.
+ * Not `Object.hasOwn`: the app is built for Safari 15.0 (iOS 15.0, macOS 11), and that function came with Safari 15.4.
+ */
+const isSavedView = (nm: string): boolean => Object.prototype.hasOwnProperty.call(S.views, nm);
 
 /** The name Save view is asking about before it replaces that view, and the clock that withdraws the question. */
 let replaceAsked = '';
