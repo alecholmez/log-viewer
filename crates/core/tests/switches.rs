@@ -259,6 +259,35 @@ fn a_state_that_declares_0_to_2_and_reads_0_and_1_is_still_a_switch() {
     assert_eq!(names(&reply), ["Drive By Wire Throttle Motor Direction"]);
 }
 
+/// Known limit of the grouping rule: in the 1:55 pm log four channels each change once, at the same sample, so the rule
+/// takes them for one signal. Thermofan 2 Output State, the shortest name, carries the other three.
+#[test]
+fn four_channels_that_change_once_at_the_same_sample_are_one_switch() {
+    let Some(mut s) = sample_session() else {
+        return;
+    };
+    let log = log_key(&mut s, "PCLog_2026-04-17_0155pm.csv");
+    let reply = rows(&mut s, &log, 0.0, 69.663);
+    let rows = reply["rows"].as_array().unwrap();
+    let fan = rows
+        .iter()
+        .find(|r| r["name"] == "Thermofan 2 Output State");
+    assert_eq!(
+        fan,
+        Some(&json!({
+            "name": "Thermofan 2 Output State",
+            "also": [
+                "Thermofan 1 Idle Up Active",
+                "Thermofan 2 Idle Up Active",
+                "Digital Pulse Output 2 Output State"
+            ],
+            "on": [[60.909, 69.663]],
+            "gaps": [],
+            "changes": [60.909],
+        }))
+    );
+}
+
 #[test]
 fn a_log_with_no_switch_that_changes_has_no_rows() {
     let Some(mut s) = sample_session() else {

@@ -26,6 +26,7 @@ Under the traces in the replay, a block of thin rows, one per switch, sharing th
   goes the same way at most one sample apart, and they are missing at the same samples. A group is every channel linked to another by that
   rule, worked out once per log. The row's bar, gaps and changes come from the channel with the shortest name alone, and the row appears
   when that channel changes inside the span. The design said "identical across the whole log"; see Why.)
+  Known limit: in the 1:55 pm log, Thermofan 2 Output State, Thermofan 1 Idle Up Active, Thermofan 2 Idle Up Active and Digital Pulse Output 2 Output State each change once, at the same sample, and are one switch. Channels that change once together cannot be told from one signal logged twice. Pinned by `four_channels_that_change_once_at_the_same_sample_are_one_switch` in `crates/core/tests/switches.rs`.
 - At most 8 rows, in order of first change. If more qualify, the note under the traces says how many are not shown.
 - Pointing at a row draws a thin vertical line through the traces at each of its changes. No other row draws these, so the traces stay clean.
 - A stretch with no samples is left empty, and the readout shows a dash there.

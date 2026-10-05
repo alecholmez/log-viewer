@@ -27,7 +27,7 @@ const EDGE: f64 = 0.0005;
 
 /// One on/off channel of a log, over the whole log.
 #[derive(Clone, Debug)]
-pub struct Switch {
+pub(crate) struct Switch {
     /// channel index in the log
     j: usize,
     /// sample index of every change: the first sample that shows the new state
@@ -40,7 +40,7 @@ pub struct Switch {
 
 /// The switch channels of a log that are one signal, and the channel their row is built from.
 #[derive(Clone, Debug)]
-pub struct Group {
+pub(crate) struct Group {
     /// the member with the shortest name, ties broken by name order
     switch: Switch,
     name: String,
@@ -73,12 +73,13 @@ pub struct Rows {
 
 /// A switch: the range the log declares for it, if any, lies within 0 to 2, and its samples read 0 and 1.
 fn is_switch(a: &[f64], range: Option<[f64; 2]>) -> bool {
-    declares_on_off(range) && reads_on_off(a)
+    no_range_or_on_off(range) && reads_on_off(a)
 }
 
-/// NSP declares `1,0` or `2,0` for a switch, and a wider range for a state or a count that can read only 0 and 1 in one log.
-/// A log that declares no range leaves it to the samples.
-fn declares_on_off(range: Option<[f64; 2]>) -> bool {
+/// True when the log declares no range for the channel, or one within 0 to 2. NSP declares `1,0` or `2,0` for a switch,
+/// and a wider range for a state or a count that can read only 0 and 1 in one log. A log that declares no range leaves it
+/// to the samples. A NaN bound fails both comparisons, so such a channel is not a switch.
+fn no_range_or_on_off(range: Option<[f64; 2]>) -> bool {
     range.is_none_or(|[min, max]| min >= 0.0 && max <= 2.0)
 }
 

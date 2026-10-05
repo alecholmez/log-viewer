@@ -45,7 +45,10 @@ pub struct Log {
     pub hz: f64,
     pub names: Vec<String>,
     pub types: Vec<String>,
-    /// per channel, the range the log's header declares, as [min, max] in engineering units; None when it declares none
+    /// per channel, the range the log's header declares, as [min, max] in engineering units; None when it declares none.
+    /// A bound written as the ECU's no-reading value is NaN, and means wider than anything: a rule that reads a range must
+    /// be false for NaN (`width <= limit`, not `!(width > limit)`). Time Since Engine Limiter declares `2147483647,-1` in
+    /// every sample log and is held as [-0.001, NaN].
     pub ranges: Vec<Option<[f64; 2]>>,
     pub cols: Vec<Col>,
     pub ch: Ch,
@@ -209,5 +212,19 @@ mod tests {
                 None
             ]
         );
+    }
+
+    /// Time Since Engine Limiter declares `2147483647,-1` in every sample log. Its maximum is the ECU's no-reading value.
+    #[test]
+    fn a_bound_at_the_no_reading_value_is_not_a_number() {
+        let text = "%DataLog%\n\
+            Channel : RPM\nType : EngineSpeed\nDisplayMaxMin : 20000,0\n\
+            Channel : Vehicle Speed\nType : Speed\nDisplayMaxMin : 4000,0\n\
+            Channel : Time Since Engine Limiter\nType : Time_ms_as_s\nDisplayMaxMin : 2147483647,-1\n\
+            12:00:00.000,3000,0,0\n";
+        let log = Log::from_raw(parse_nsp_csv(text, "t.csv").unwrap()).unwrap();
+        let [min, max] = log.ranges[2].unwrap();
+        assert_eq!(min, -0.001);
+        assert!(max.is_nan(), "{max}");
     }
 }
